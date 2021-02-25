@@ -1,0 +1,5 @@
+- Vector TD: Level design and aesthetics
+- Onslaught and N: Menu screen design
+- N++: Rocket/missile explosion and trail
+- Mindustry: Rocket/missile exlosion
+- Starfighter: Disputed Galaxy: Weapon/tower design
