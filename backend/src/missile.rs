@@ -5,7 +5,10 @@ use std::f32::consts::{PI, TAU};
 use crate::{
     explosion::spawn_explosion,
     graphics::{create_missile, recycle_missile, render_missile},
-    map::Constants,
+    map::{
+        distances::{calc_dist_from_exit, Distances},
+        true_row_col, Constants, Tile,
+    },
     mob::Mob,
     smoke::spawn_smoke_trail,
     swallow::spawn_swallow,
@@ -49,9 +52,15 @@ impl World {
         for tower in self.missile_towers.values_mut() {
             tower.reload_countdown = tower.reload_countdown.saturating_sub(1);
             if tower.reload_countdown == 0 {
-                if let Some((target, target_x, target_y)) =
-                    find_target(&self.walkers, &self.mobs, tower.row, tower.col)
-                {
+                if let Some((target, target_x, target_y)) = find_target(
+                    &self.walkers,
+                    &self.mobs,
+                    tower.row,
+                    tower.col,
+                    &self.map,
+                    &self.dist_from_entrance,
+                    &self.dist_from_exit,
+                ) {
                     let entity = self.entity_ids.next();
                     spawn_missile(
                         entity,
@@ -156,23 +165,29 @@ fn find_target(
     mobs: &Map<u32, Mob>,
     row: usize,
     col: usize,
+    map: &[Tile],
+    _dist_from_entrance: &Distances,
+    dist_from_exit: &Distances,
 ) -> Option<(u32, f32, f32)> {
     let tower_x = (col * usize::TILE_SIZE + usize::TILE_SIZE / 2) as f32 + 0.5;
     let tower_y = (row * usize::TILE_SIZE + usize::TILE_SIZE / 2) as f32 + 0.5;
 
     let mut first_walker = None;
-    let mut max_progress = 0.0;
+    let mut min_dist = f32::MAX;
 
     let range = 300.0;
 
-    for (entity, walker) in walkers {
+    for entity in walkers.keys() {
         if let Some(mob) = mobs.get(entity) {
             let dx = mob.x - tower_x;
             let dy = mob.y - tower_y;
+            let (true_row, true_col) = true_row_col(mob.x, mob.y);
+            let dist_from_exit = calc_dist_from_exit(map, dist_from_exit, mob.x, mob.y);
+            // dist_from_exit[true_row * TRUE_MAP_WIDTH + true_col].unwrap_or(u16::MAX);
             let distance_squared = dx * dx + dy * dy;
-            if walker.progress > max_progress && distance_squared <= range * range {
-                max_progress = walker.progress;
+            if distance_squared <= range * range && dist_from_exit <= min_dist {
                 first_walker = Some((*entity, mob.x, mob.y));
+                min_dist = dist_from_exit;
             }
         }
     }

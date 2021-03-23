@@ -1,3 +1,5 @@
+pub mod distances;
+
 use crate::graphics::{render_path_border, render_path_tile};
 
 pub const MAP_WIDTH: usize = 22;

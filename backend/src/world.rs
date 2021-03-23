@@ -5,7 +5,12 @@ use wasm_bindgen::prelude::*;
 use crate::{
     explosion::{Explosion, Impulse},
     graphics::{create_mob, create_tower, render_mob_position},
-    map::{parse, render_map, Constants, Tile, MAP_0, MAP_WIDTH},
+    map::{
+        distances::{
+            calc_dist_from_exit, generate_dist_from_entrance, generate_dist_from_exit, Distances,
+        },
+        parse, render_map, true_row_col, Constants, Tile, MAP_0, MAP_WIDTH, TRUE_MAP_WIDTH,
+    },
     missile::{Missile, MissileTower},
     mob::Mob,
     smoke::SmokeTrail,
@@ -42,6 +47,10 @@ pub struct World {
     #[wasm_bindgen(skip)]
     pub explosions: Map<u32, Explosion>,
     #[wasm_bindgen(skip)]
+    pub dist_from_entrance: Distances,
+    #[wasm_bindgen(skip)]
+    pub dist_from_exit: Distances,
+    #[wasm_bindgen(skip)]
     pub impulses: Map<u32, Impulse>,
     #[wasm_bindgen(skip)]
     pub map: Vec<Tile>,
@@ -77,13 +86,7 @@ impl World {
         let mob_x = f32::TILE_SIZE * -0.5;
         let mob_y = f32::TILE_SIZE * 1.5;
         mobs.insert(mob_id, Mob::new(mob_x, mob_y));
-        walkers.insert(
-            mob_id,
-            Walker {
-                speed: 1.5,
-                progress: 0.0,
-            },
-        );
+        walkers.insert(mob_id, Walker { speed: 1.5 });
         impulses.insert(mob_id, Impulse { dx: 0.0, dy: 0.0 });
 
         create_mob(mob_id);
@@ -93,13 +96,7 @@ impl World {
         let mob_x = f32::TILE_SIZE * -0.5;
         let mob_y = f32::TILE_SIZE * 2.5;
         mobs.insert(mob_id, Mob::new(mob_x, mob_y));
-        walkers.insert(
-            mob_id,
-            Walker {
-                speed: 1.5,
-                progress: 0.0,
-            },
-        );
+        walkers.insert(mob_id, Walker { speed: 1.5 });
         impulses.insert(mob_id, Impulse { dx: 0.0, dy: 0.0 });
 
         create_mob(mob_id);
@@ -109,13 +106,7 @@ impl World {
         let mob_x = f32::TILE_SIZE * 1.5;
         let mob_y = f32::TILE_SIZE * 1.5;
         mobs.insert(mob_id, Mob::new(mob_x, mob_y));
-        walkers.insert(
-            mob_id,
-            Walker {
-                speed: 1.5,
-                progress: 0.0,
-            },
-        );
+        walkers.insert(mob_id, Walker { speed: 1.5 });
         impulses.insert(mob_id, Impulse { dx: 0.0, dy: 0.0 });
 
         create_mob(mob_id);
@@ -125,13 +116,7 @@ impl World {
         let mob_x = f32::TILE_SIZE * 1.5;
         let mob_y = f32::TILE_SIZE * 2.5;
         mobs.insert(mob_id, Mob::new(mob_x, mob_y));
-        walkers.insert(
-            mob_id,
-            Walker {
-                speed: 1.5,
-                progress: 0.0,
-            },
-        );
+        walkers.insert(mob_id, Walker { speed: 1.5 });
         impulses.insert(mob_id, Impulse { dx: 0.0, dy: 0.0 });
 
         create_mob(mob_id);
@@ -167,6 +152,8 @@ impl World {
             tick: 0,
             entity_ids,
             explosions: Default::default(),
+            dist_from_entrance: generate_dist_from_entrance(&map),
+            dist_from_exit: generate_dist_from_exit(&map),
             impulses,
             map,
             missile_towers,

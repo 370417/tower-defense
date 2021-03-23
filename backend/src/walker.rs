@@ -10,7 +10,6 @@ pub const STANDARD_ENEMY_RADIUS: f32 = 0.3 * f32::TILE_SIZE;
 /// A walker is an entity that travels along the map's path.
 pub struct Walker {
     pub speed: f32,
-    pub progress: f32,
 }
 
 impl Walker {
@@ -38,8 +37,6 @@ impl World {
                 }
 
                 walk_tile(&self.map, true_row, true_col, &mut mob.x, &mut mob.y, speed);
-
-                walker.progress += walker.speed;
             }
         }
     }
@@ -56,7 +53,7 @@ pub struct Velocity {
 /// Given a position on the map, return the direction that a walker should try
 /// to travel in. This function returns as if the walker is trying to go
 /// forwards (positive speed).
-fn walk_direction(map: &[Tile], x: f32, y: f32) -> Velocity {
+pub fn walk_direction(map: &[Tile], x: f32, y: f32) -> Velocity {
     let (true_row, true_col) = true_row_col(x, y);
 
     let (entrance_direction, exit_direction) = match map[true_row * TRUE_MAP_WIDTH + true_col] {
