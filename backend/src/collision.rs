@@ -1,7 +1,7 @@
 //! Functions for finding collisions and intersections between geometric objects
 //! and between game entities.
 
-use crate::map::{has_border, Constants, Tile};
+use crate::map::{has_border, in_bounds, Constants, Tile};
 
 /// Resolve collisions between a circular entity and the edges of the path
 /// in a certain map. If the entity overlaps a wall in multiple dimensions,
@@ -12,6 +12,10 @@ use crate::map::{has_border, Constants, Tile};
 /// Return the velocity that was applied to the entity to make it no longer
 /// collide.
 pub fn resolve_collisions(map: &[Tile], x: &mut f32, y: &mut f32, radius: f32) -> (f32, f32) {
+    if !in_bounds(*x, *y) {
+        return (0.0, 0.0);
+    }
+
     let low_row = (*y / f32::TILE_SIZE + 1.5) as usize;
     let low_col = (*x / f32::TILE_SIZE + 1.5) as usize;
     let high_row = low_row + 1;

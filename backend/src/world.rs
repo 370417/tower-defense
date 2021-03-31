@@ -4,17 +4,17 @@ use wasm_bindgen::prelude::*;
 
 use crate::{
     explosion::{Explosion, Impulse},
-    graphics::{create_mob, create_tower, render_mob_position},
+    falcon::{create_falcon_tower, Falcon, TargetIndicator},
+    graphics::{create_mob, recycle_range, render_mob_position, render_range},
     map::{
-        distances::{
-            calc_dist_from_exit, generate_dist_from_entrance, generate_dist_from_exit, Distances,
-        },
-        parse, render_map, true_row_col, Constants, Tile, MAP_0, MAP_WIDTH, TRUE_MAP_WIDTH,
+        distances::{generate_dist_from_entrance, generate_dist_from_exit, Distances},
+        parse, render_map, tile_center, Constants, Tile, MAP_0, MAP_WIDTH,
     },
-    missile::{Missile, MissileTower},
+    missile::{create_misile_tower, Missile, MissileSpawner},
     mob::Mob,
     smoke::SmokeTrail,
-    swallow::Swallow,
+    swallow::{create_swallow_tower, Swallow, SwallowAfterImage},
+    tower::{Range, Tower},
     walker::Walker,
 };
 
@@ -51,11 +51,13 @@ pub struct World {
     #[wasm_bindgen(skip)]
     pub dist_from_exit: Distances,
     #[wasm_bindgen(skip)]
+    pub falcons: Map<u32, Falcon>,
+    #[wasm_bindgen(skip)]
     pub impulses: Map<u32, Impulse>,
     #[wasm_bindgen(skip)]
     pub map: Vec<Tile>,
     #[wasm_bindgen(skip)]
-    pub missile_towers: Map<u32, MissileTower>,
+    pub missile_spawners: Map<u32, MissileSpawner>,
     #[wasm_bindgen(skip)]
     pub missiles: Map<u32, Missile>,
     #[wasm_bindgen(skip)]
@@ -63,7 +65,13 @@ pub struct World {
     #[wasm_bindgen(skip)]
     pub smoke_trails: Map<u32, SmokeTrail>,
     #[wasm_bindgen(skip)]
+    pub swallow_after_images: Map<u32, SwallowAfterImage>,
+    #[wasm_bindgen(skip)]
     pub swallows: Map<u32, Swallow>,
+    #[wasm_bindgen(skip)]
+    pub target_indicators: Map<u32, TargetIndicator>,
+    #[wasm_bindgen(skip)]
+    pub towers: Map<u32, Tower>,
     #[wasm_bindgen(skip)]
     pub walkers: Map<u32, Walker>,
 }
@@ -122,31 +130,37 @@ impl World {
         create_mob(mob_id);
         render_mob_position(mob_id, mob_x, mob_y);
 
-        let mut missile_towers = IndexMap::with_hasher(Default::default());
+        let mut towers = Default::default();
+        let mut missile_spawners = Default::default();
+        // let mut missile_towers = IndexMap::with_hasher(Default::default());
+        // let mut swallow_towers = Default::default();
+        let mut swallows = Default::default();
 
-        let tower_id = entity_ids.next();
-        missile_towers.insert(
-            tower_id,
-            MissileTower {
-                row: 3,
-                col: 6,
-                reload_countdown: 30,
-                reload_cost: 60,
-            },
-        );
-        create_tower(tower_id, 3, 6);
+        create_swallow_tower(&mut entity_ids, 7, 6, &mut towers, &mut swallows, &mut mobs);
 
-        let tower_id = entity_ids.next();
-        missile_towers.insert(
-            tower_id,
-            MissileTower {
-                row: 10,
-                col: 13,
-                reload_countdown: 30,
-                reload_cost: 60,
-            },
+        create_swallow_tower(
+            &mut entity_ids,
+            14,
+            14,
+            &mut towers,
+            &mut swallows,
+            &mut mobs,
         );
-        create_tower(tower_id, 10, 13);
+
+        create_misile_tower(entity_ids.next(), 3, 6, &mut towers, &mut missile_spawners);
+
+        create_misile_tower(
+            entity_ids.next(),
+            10,
+            13,
+            &mut towers,
+            &mut missile_spawners,
+        );
+
+        let mut falcons = Default::default();
+
+        create_falcon_tower(&mut entity_ids, 8, 3, &mut towers, &mut falcons, &mut mobs);
+        create_falcon_tower(&mut entity_ids, 3, 15, &mut towers, &mut falcons, &mut mobs);
 
         World {
             tick: 0,
@@ -154,13 +168,17 @@ impl World {
             explosions: Default::default(),
             dist_from_entrance: generate_dist_from_entrance(&map),
             dist_from_exit: generate_dist_from_exit(&map),
+            falcons,
             impulses,
             map,
-            missile_towers,
+            missile_spawners,
             missiles: Default::default(),
             mobs,
             smoke_trails: Default::default(),
-            swallows: Default::default(),
+            swallow_after_images: Default::default(),
+            swallows,
+            target_indicators: Default::default(),
+            towers,
             walkers,
         }
     }
@@ -171,6 +189,8 @@ impl World {
         self.walk();
         self.fly_missiles();
         self.fly_swallows();
+        self.fade_swallow_after_images();
+        self.fly_falcons();
         self.update_impulses();
         self.update_explosions();
         self.operate_missile_towers();
@@ -182,6 +202,22 @@ impl World {
                 mob.x = -(f32::TILE_SIZE / 2.0);
             }
         }
+    }
+
+    // 2 types of user inputs:
+    // 1. stuff that affects the game and needs to be shared over the network
+    // 2. stuff that just affects the ui, like this hover_map
+    pub fn hover_map(&self, _player: u32, row: usize, col: usize) {
+        for tower in self.towers.values() {
+            if (row, col) == (tower.row, tower.col) {
+                let (x, y) = tile_center(row, col);
+                match tower.range {
+                    Range::Circle { radius } => render_range(x, y, radius),
+                }
+                return;
+            }
+        }
+        recycle_range();
     }
 }
 

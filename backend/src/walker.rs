@@ -56,19 +56,19 @@ pub struct Velocity {
 pub fn walk_direction(map: &[Tile], x: f32, y: f32) -> Velocity {
     let (true_row, true_col) = true_row_col(x, y);
 
-    let (entrance_direction, exit_direction) = match map[true_row * TRUE_MAP_WIDTH + true_col] {
-        Tile::North => return NORTH,
-        Tile::South => return SOUTH,
-        Tile::East => return EAST,
-        Tile::West => return WEST,
-        Tile::NorthToEast => (NORTH, EAST),
-        Tile::NorthToWest => (NORTH, WEST),
-        Tile::SouthToEast => (SOUTH, EAST),
-        Tile::SouthToWest => (SOUTH, WEST),
-        Tile::EastToNorth => (EAST, NORTH),
-        Tile::EastToSouth => (EAST, SOUTH),
-        Tile::WestToNorth => (WEST, NORTH),
-        Tile::WestToSouth => (WEST, SOUTH),
+    let (entrance_direction, exit_direction) = match map.get(true_row * TRUE_MAP_WIDTH + true_col) {
+        Some(Tile::North) => return NORTH,
+        Some(Tile::South) => return SOUTH,
+        Some(Tile::East) => return EAST,
+        Some(Tile::West) => return WEST,
+        Some(Tile::NorthToEast) => (NORTH, EAST),
+        Some(Tile::NorthToWest) => (NORTH, WEST),
+        Some(Tile::SouthToEast) => (SOUTH, EAST),
+        Some(Tile::SouthToWest) => (SOUTH, WEST),
+        Some(Tile::EastToNorth) => (EAST, NORTH),
+        Some(Tile::EastToSouth) => (EAST, SOUTH),
+        Some(Tile::WestToNorth) => (WEST, NORTH),
+        Some(Tile::WestToSouth) => (WEST, SOUTH),
         _ => return Velocity { dx: 0.0, dy: 0.0 },
     };
 
@@ -88,7 +88,7 @@ pub fn walk_direction(map: &[Tile], x: f32, y: f32) -> Velocity {
     }
 }
 
-fn walk_tile(
+pub fn walk_tile(
     map: &[Tile],
     mut true_row: usize,
     mut true_col: usize,
@@ -105,7 +105,10 @@ fn walk_tile(
         let center_x = tile_x + f32::TILE_SIZE / 2.0;
         let center_y = tile_y + f32::TILE_SIZE / 2.0;
 
-        let tile = map[true_row * TRUE_MAP_WIDTH + true_col];
+        let tile = match map.get(true_row * TRUE_MAP_WIDTH + true_col) {
+            Some(&tile) => tile,
+            None => break,
+        };
         let (new_x, new_y) = match tile {
             Tile::OutOfBounds | Tile::Empty => return,
             Tile::North | Tile::South | Tile::East | Tile::West => {

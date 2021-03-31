@@ -203,7 +203,7 @@ pub fn calc_dist_from_exit(map: &[Tile], distances: &Distances, x: f32, y: f32) 
     let forward_distance = x_remainder * direction.dx + y_remainder * direction.dy;
     let lateral_distance = x_remainder * right_direction.dx + y_remainder * right_direction.dy;
 
-    if let Some(discrete_distance) = distances[true_row * TRUE_MAP_WIDTH + true_col] {
+    if let Some(Some(discrete_distance)) = distances.get(true_row * TRUE_MAP_WIDTH + true_col) {
         let tile = map[true_row * TRUE_MAP_WIDTH + true_col];
 
         // At corners, the rotation depends on which direction we are traveling.
@@ -236,7 +236,7 @@ pub fn calc_dist_from_exit(map: &[Tile], distances: &Distances, x: f32, y: f32) 
 pub fn calc_dist_from_entrance(map: &[Tile], distances: &Distances, x: f32, y: f32) -> f32 {
     let direction = walk_direction(map, x, y);
     // We are rotating clockwise, but since we are moving backwards towards the
-    // entrance, remember that this points t
+    // entrance, remember that this points to the left relative to movement
     let right_direction = rotate_clockwise(direction);
 
     let (true_row, true_col) = true_row_col(x, y);
@@ -251,7 +251,7 @@ pub fn calc_dist_from_entrance(map: &[Tile], distances: &Distances, x: f32, y: f
     let forward_distance = x_remainder * direction.dx + y_remainder * direction.dy;
     let lateral_distance = x_remainder * right_direction.dx + y_remainder * right_direction.dy;
 
-    if let Some(discrete_distance) = distances[true_row * TRUE_MAP_WIDTH + true_col] {
+    if let Some(Some(discrete_distance)) = distances.get(true_row * TRUE_MAP_WIDTH + true_col) {
         let tile = map[true_row * TRUE_MAP_WIDTH + true_col];
 
         // At corners, the rotation depends on which direction we are traveling.

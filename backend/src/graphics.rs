@@ -13,11 +13,20 @@ impl World {
         for (&id, missile) in &self.missiles {
             missile.render(id, frame_fudge, &self);
         }
+        for (&_id, smoke_trail) in &mut self.smoke_trails {
+            smoke_trail.render(frame_fudge, self.tick);
+        }
         for (&id, swallow) in &self.swallows {
             swallow.render(id, frame_fudge, &self);
         }
-        for (&_id, smoke_trail) in &mut self.smoke_trails {
-            smoke_trail.render(frame_fudge, self.tick);
+        for (&id, after_image) in &self.swallow_after_images {
+            after_image.render(id, frame_fudge);
+        }
+        for (&id, falcon) in &self.falcons {
+            falcon.render(id, frame_fudge, &self);
+        }
+        for (&id, indicator) in &self.target_indicators {
+            indicator.render(id, frame_fudge, &self);
         }
     }
 }
@@ -30,7 +39,7 @@ extern "C" {
     pub fn create_mob(id: u32);
     pub fn render_mob_position(id: u32, x: f32, y: f32);
 
-    pub fn create_tower(id: u32, row: u32, col: u32);
+    pub fn create_tower(id: u32, row: usize, col: usize);
 
     pub fn create_missile(id: u32);
     pub fn render_missile(id: u32, x: f32, y: f32, rotation: f32);
@@ -43,4 +52,19 @@ extern "C" {
     pub fn create_explosion(id: u32, x: f32, y: f32);
     pub fn render_explosion(id: u32, radius: f32, alpha: f32);
     pub fn recycle_explosion(id: u32);
+
+    pub fn create_swallow(id: u32);
+    pub fn render_swallow(id: u32, x: f32, y: f32, rotation: f32, fade: f32);
+    pub fn recycle_swallow(id: u32);
+
+    pub fn create_falcon(id: u32);
+    pub fn render_falcon(id: u32, x: f32, y: f32, rotation: f32, fade: f32);
+    pub fn recycle_falcon(id: u32);
+
+    pub fn create_indicator(id: u32);
+    pub fn render_indicator(id: u32, x: f32, y: f32);
+    pub fn recycle_indicator(id: u32);
+
+    pub fn render_range(x: f32, y: f32, radius: f32);
+    pub fn recycle_range();
 }

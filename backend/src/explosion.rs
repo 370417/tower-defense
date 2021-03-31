@@ -6,8 +6,7 @@ use crate::{
     collision::resolve_collisions,
     distance::fast_distance,
     graphics::{create_explosion, recycle_explosion, render_explosion},
-    map::Constants,
-    walker::STANDARD_ENEMY_RADIUS,
+    walker::{walk_direction, Velocity, STANDARD_ENEMY_RADIUS},
     world::{Map, World},
 };
 
@@ -97,14 +96,6 @@ impl World {
                                 * (1.5 - 0.5 * explosion.radius / explosion.max_radius);
                             impulse.dy += normalized_y
                                 * (1.5 - 0.5 * explosion.radius / explosion.max_radius);
-
-                            // Make sure impulses don't get too big
-                            let impulse_magnitude = fast_distance(impulse.dx, impulse.dy);
-                            let max_magnitude = f32::TILE_SIZE / 2.0;
-                            if impulse_magnitude > max_magnitude {
-                                impulse.dx *= max_magnitude / impulse_magnitude;
-                                impulse.dy *= max_magnitude / impulse_magnitude;
-                            }
                         }
                     }
                 }
@@ -138,6 +129,14 @@ impl World {
                     let original_x = mob.x;
                     let original_y = mob.y;
 
+                    // Make sure impulses don't get too big
+                    let impulse_magnitude = fast_distance(impulse.dx, impulse.dy);
+                    let max_magnitude = STANDARD_ENEMY_RADIUS / 2.5;
+                    if impulse_magnitude > max_magnitude {
+                        impulse.dx *= max_magnitude / impulse_magnitude;
+                        impulse.dy *= max_magnitude / impulse_magnitude;
+                    }
+
                     mob.x += impulse.dx;
                     mob.y += impulse.dy;
 
@@ -147,6 +146,11 @@ impl World {
                         &mut mob.y,
                         STANDARD_ENEMY_RADIUS,
                     );
+
+                    let zero = Velocity { dx: 0.0, dy: 0.0 };
+                    if walk_direction(&self.map, mob.x, mob.y) == zero {
+                        // potentially remove the mob?
+                    }
 
                     // Update the impulse based on dx,dy post-collision.
                     // This way, collisions actually absorb momentum.

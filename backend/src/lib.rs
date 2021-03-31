@@ -1,12 +1,16 @@
 mod collision;
 mod distance;
+mod ease;
 mod explosion;
+mod falcon;
 mod graphics;
 mod map;
 mod missile;
 mod mob;
 mod smoke;
 mod swallow;
+mod targeting;
+mod tower;
 mod walker;
 mod world;
 
@@ -20,4 +24,12 @@ static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
 #[wasm_bindgen(start)]
 pub fn init() {
     console_error_panic_hook::set_once();
+}
+
+use wasm_bindgen::prelude::*;
+
+#[wasm_bindgen]
+extern "C" {
+    #[wasm_bindgen(js_namespace = console)]
+    fn log(s: &str);
 }

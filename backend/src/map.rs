@@ -220,10 +220,10 @@ pub fn has_border(
     true_row_b: usize,
     true_col_b: usize,
 ) -> bool {
-    let tile_a = map[true_row_a * TRUE_MAP_WIDTH + true_col_a];
-    let tile_b = map[true_row_b * TRUE_MAP_WIDTH + true_col_b];
+    let tile_a = map.get(true_row_a * TRUE_MAP_WIDTH + true_col_a);
+    let tile_b = map.get(true_row_b * TRUE_MAP_WIDTH + true_col_b);
 
-    (tile_a == Tile::Empty) ^ (tile_b == Tile::Empty)
+    (tile_a == Some(&Tile::Empty)) ^ (tile_b == Some(&Tile::Empty))
 }
 
 /// Call the external render functions. Only do this once per level, not once
@@ -268,4 +268,16 @@ pub fn true_row_col(x: f32, y: f32) -> (usize, usize) {
         (y + 2.0 * f32::TILE_SIZE) as usize / usize::TILE_SIZE,
         (x + 2.0 * f32::TILE_SIZE) as usize / usize::TILE_SIZE,
     )
+}
+
+pub fn tile_center(row: usize, col: usize) -> (f32, f32) {
+    let x = (col as f32 + 0.5) * f32::TILE_SIZE;
+    let y = (row as f32 + 0.5) * f32::TILE_SIZE;
+    (x, y)
+}
+
+pub fn in_bounds(x: f32, y: f32) -> bool {
+    let width = MAP_WIDTH as f32 * f32::TILE_SIZE;
+    let height = MAP_HEIGHT as f32 * f32::TILE_SIZE;
+    x >= 0.0 && y >= 0.0 && x < width && y < height
 }

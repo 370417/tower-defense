@@ -1,45 +1,82 @@
 //! Missiles and missile towers.
 
-use std::f32::consts::{PI, TAU};
-
 use crate::{
+    ease::ease_to_x_geometric,
     explosion::spawn_explosion,
-    graphics::{create_missile, recycle_missile, render_missile},
-    map::{
-        distances::{calc_dist_from_exit, Distances},
-        true_row_col, Constants, Tile,
-    },
+    graphics::{create_missile, create_tower, recycle_missile, render_missile},
+    map::{tile_center, Constants},
     mob::Mob,
     smoke::spawn_smoke_trail,
-    swallow::spawn_swallow,
-    walker::{Walker, STANDARD_ENEMY_RADIUS},
+    targeting::{find_target, Targeting},
+    tower::{Range, Tower},
+    walker::STANDARD_ENEMY_RADIUS,
     world::{Map, World},
 };
 
 const MAX_SPEED: f32 = 5.0;
-const MAX_TURN_SPEED: f32 = 0.15;
+const MAX_TURN_SPEED: f32 = 0.13;
 const ACCELERATION: f32 = 0.31;
+const ROTATION_ACCEL: f32 = 0.05;
 
-pub struct MissileTower {
-    pub row: usize,
-    pub col: usize,
+// pub struct MissileTower {
+//     pub row: usize,
+//     pub col: usize,
+//     pub reload_countdown: u32,
+//     pub reload_cost: u32,
+// }
+
+pub struct MissileSpawner {
     pub reload_countdown: u32,
     pub reload_cost: u32,
+}
+
+pub struct Missile {
+    pub target: u32,
+    pub rotation: f32,
+    pub rotation_speed: f32,
+    pub rotation_acceleration: f32,
+    pub max_turn_speed: f32,
+    pub speed: f32,
+    pub max_speed: f32,
+    pub acceleration: f32,
+}
+
+pub fn create_misile_tower(
+    entity: u32,
+    row: usize,
+    col: usize,
+    towers: &mut Map<u32, Tower>,
+    spawners: &mut Map<u32, MissileSpawner>,
+) {
+    towers.insert(
+        entity,
+        Tower {
+            row,
+            col,
+            range: Range::Circle { radius: 200.0 },
+        },
+    );
+    spawners.insert(
+        entity,
+        MissileSpawner {
+            reload_countdown: 0,
+            reload_cost: 60,
+        },
+    );
+
+    create_tower(entity, row, col);
 }
 
 fn spawn_missile(
     entity: u32,
     target: u32,
-    tower: &MissileTower,
+    tower: &Tower,
     target_x: f32,
     target_y: f32,
     missiles: &mut Map<u32, Missile>,
     mobs: &mut Map<u32, Mob>,
 ) {
-    // Add one half because the top and left edges of tiles are occupied by
-    // the border between tiles
-    let tower_x = (tower.col * usize::TILE_SIZE + usize::TILE_SIZE / 2) as f32 + 0.5;
-    let tower_y = (tower.row * usize::TILE_SIZE + usize::TILE_SIZE / 2) as f32 + 0.5;
+    let (tower_x, tower_y) = tile_center(tower.row, tower.col);
 
     let rotation = (target_y - tower_y).atan2(target_x - tower_x);
     missiles.insert(entity, Missile::new(target, rotation));
@@ -49,39 +86,36 @@ fn spawn_missile(
 
 impl World {
     pub fn operate_missile_towers(&mut self) {
-        for tower in self.missile_towers.values_mut() {
-            tower.reload_countdown = tower.reload_countdown.saturating_sub(1);
-            if tower.reload_countdown == 0 {
-                if let Some((target, target_x, target_y)) = find_target(
-                    &self.walkers,
-                    &self.mobs,
-                    tower.row,
-                    tower.col,
-                    &self.map,
-                    &self.dist_from_entrance,
-                    &self.dist_from_exit,
-                ) {
-                    let entity = self.entity_ids.next();
-                    spawn_missile(
-                        entity,
-                        target,
-                        tower,
-                        target_x,
-                        target_y,
-                        &mut self.missiles,
-                        &mut self.mobs,
-                    );
-                    spawn_swallow(
-                        self.entity_ids.next(),
-                        target,
-                        tower,
-                        target_x,
-                        target_y,
-                        &mut self.swallows,
-                        &mut self.mobs,
-                    );
-                    spawn_smoke_trail(&mut self.entity_ids, &mut self.smoke_trails, entity);
-                    tower.reload_countdown = tower.reload_cost;
+        for (entity, spawner) in &mut self.missile_spawners {
+            if let Some(tower) = self.towers.get(entity) {
+                if spawner.reload_countdown > 0 {
+                    spawner.reload_countdown -= 1;
+                } else {
+                    let (tower_x, tower_y) = tile_center(tower.row, tower.col);
+                    if let Some((target, target_x, target_y)) = find_target(
+                        tower_x,
+                        tower_y,
+                        tower.range,
+                        Targeting::First,
+                        &self.walkers,
+                        &self.mobs,
+                        &self.map,
+                        &self.dist_from_entrance,
+                        &self.dist_from_exit,
+                    ) {
+                        let entity = self.entity_ids.next();
+                        spawn_missile(
+                            entity,
+                            target,
+                            tower,
+                            target_x,
+                            target_y,
+                            &mut self.missiles,
+                            &mut self.mobs,
+                        );
+                        spawn_smoke_trail(&mut self.entity_ids, &mut self.smoke_trails, entity);
+                        spawner.reload_countdown = spawner.reload_cost;
+                    }
                 }
             }
         }
@@ -124,23 +158,15 @@ impl World {
 
                     // Aim toward the target
                     let rotation = f32::atan2(target_y - missile_mob.y, target_x - missile_mob.x);
-                    let turn_amount = (rotation - missile.rotation) % TAU;
 
-                    // Adjust turn_amount to range from -pi to +pi
-                    let turn_amount = if turn_amount < -PI {
-                        turn_amount + TAU
-                    } else if turn_amount > PI {
-                        turn_amount - TAU
-                    } else {
-                        turn_amount
-                    };
-
-                    // Reduce turn speed when moving fast
-                    let max_turn_speed = missile.max_turn_speed * missile.max_speed
-                        / (missile.max_speed + missile.speed);
-
-                    let clamped_turn_speed = turn_amount.max(-max_turn_speed).min(max_turn_speed);
-                    missile.rotation += clamped_turn_speed;
+                    ease_to_x_geometric(
+                        &mut missile.rotation,
+                        &mut missile.rotation_speed,
+                        rotation,
+                        missile.max_turn_speed,
+                        missile.rotation_acceleration,
+                        crate::ease::Domain::Radian,
+                    );
 
                     missile.speed += missile.acceleration;
                     // Apply air resistance
@@ -160,55 +186,13 @@ impl World {
     }
 }
 
-fn find_target(
-    walkers: &Map<u32, Walker>,
-    mobs: &Map<u32, Mob>,
-    row: usize,
-    col: usize,
-    map: &[Tile],
-    _dist_from_entrance: &Distances,
-    dist_from_exit: &Distances,
-) -> Option<(u32, f32, f32)> {
-    let tower_x = (col * usize::TILE_SIZE + usize::TILE_SIZE / 2) as f32 + 0.5;
-    let tower_y = (row * usize::TILE_SIZE + usize::TILE_SIZE / 2) as f32 + 0.5;
-
-    let mut first_walker = None;
-    let mut min_dist = f32::MAX;
-
-    let range = 300.0;
-
-    for entity in walkers.keys() {
-        if let Some(mob) = mobs.get(entity) {
-            let dx = mob.x - tower_x;
-            let dy = mob.y - tower_y;
-            let (true_row, true_col) = true_row_col(mob.x, mob.y);
-            let dist_from_exit = calc_dist_from_exit(map, dist_from_exit, mob.x, mob.y);
-            // dist_from_exit[true_row * TRUE_MAP_WIDTH + true_col].unwrap_or(u16::MAX);
-            let distance_squared = dx * dx + dy * dy;
-            if distance_squared <= range * range && dist_from_exit <= min_dist {
-                first_walker = Some((*entity, mob.x, mob.y));
-                min_dist = dist_from_exit;
-            }
-        }
-    }
-
-    first_walker
-}
-
-pub struct Missile {
-    pub target: u32,
-    pub rotation: f32,
-    pub max_turn_speed: f32,
-    pub speed: f32,
-    pub max_speed: f32,
-    pub acceleration: f32,
-}
-
 impl Missile {
     fn new(target: u32, rotation: f32) -> Missile {
         Missile {
             target,
             rotation,
+            rotation_speed: 0.0,
+            rotation_acceleration: ROTATION_ACCEL,
             max_turn_speed: MAX_TURN_SPEED,
             max_speed: MAX_SPEED,
             speed: 0.0,
