@@ -1,15 +1,22 @@
-import { Application, Container, Graphics, ParticleContainer, Point, SimpleRope, Sprite, Texture } from 'pixi.js';
+import { Container, Graphics, Loader, ParticleContainer, Point, Renderer, SimpleRope, Sprite, Texture, Ticker } from 'pixi.js';
 import { MAP_WIDTH, TILE_SIZE, MAP_HEIGHT, MS_PER_UPDATE, MAX_UPDATES_PER_TICK } from './constants';
+import { initGridInput } from './input';
 import { initFalconRendering } from './render/falcon';
 import { drawGrid, initPathRendering } from './render/grid';
 import { initIndicatorRendering } from './render/indicator';
-import { initRangeRendering, recycleRange } from './render/range';
+import { initRangeRendering } from './render/range';
 import { initSwallowRendering } from './render/swallow';
+import './settings';
+
+const rendererContainer = document.getElementById('grid') as HTMLDivElement;
 
 const loadBackend = import('../dist/tower_defense');
 const loadMemory = import('../dist/tower_defense_bg.wasm');
 
-const app = new Application({
+const loader = Loader.shared;
+const ticker = Ticker.shared;
+const stage = new Container();
+let renderer = new Renderer({
     width: MAP_WIDTH * TILE_SIZE + 1,
     height: MAP_HEIGHT * TILE_SIZE + 1,
     backgroundColor: 0xFFFFFF,
@@ -17,10 +24,23 @@ const app = new Application({
     resolution: window.devicePixelRatio,
     autoDensity: true,
 });
+renderer.render(stage);
+rendererContainer.insertAdjacentElement('afterbegin', renderer.view);
 
-document.body.appendChild(app.view);
+export function refreshRenderer(antialias: boolean, resolution: number): void {
+    rendererContainer.removeChild(renderer.view);
+    renderer = new Renderer({
+        width: MAP_WIDTH * TILE_SIZE + 1,
+        height: MAP_HEIGHT * TILE_SIZE + 1,
+        backgroundColor: 0xFFFFFF,
+        antialias,
+        resolution,
+        autoDensity: true,
+    });
+    rendererContainer.insertAdjacentElement('afterbegin', renderer.view);
+}
 
-app.loader
+loader
     .add('circle', 'circle.png')
     .add('swallow', 'swallow.png')
     .add('falcon', 'falcon.png')
@@ -39,22 +59,22 @@ app.loader
         // Organize visuals by layer
 
         const background = new ParticleContainer();
-        app.stage.addChild(background);
+        stage.addChild(background);
 
         const towerLayer = new Container();
-        app.stage.addChild(towerLayer);
+        stage.addChild(towerLayer);
 
         const smokeLayer = new Container();
-        app.stage.addChild(smokeLayer);
+        stage.addChild(smokeLayer);
 
         const projectileLayer = new Container();
-        app.stage.addChild(projectileLayer);
+        stage.addChild(projectileLayer);
 
         const enemyLayer = new Container();
-        app.stage.addChild(enemyLayer);
+        stage.addChild(enemyLayer);
 
         const rangeLayer = new Container();
-        app.stage.addChild(rangeLayer);
+        stage.addChild(rangeLayer);
 
         initPathRendering(background);
         initSwallowRendering(projectileLayer, swallowTexture);
@@ -84,29 +104,26 @@ app.loader
         // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-explicit-any
         (window as any).render_mob_position = render_mob_position;
 
-        const towers = new Map<number, Container>();
+        const towers = new Map<number, [Sprite, Sprite]>();
 
         function create_tower(id: number, row: number, col: number) {
-            const tower = new ParticleContainer(10);
-            tower.x = col * TILE_SIZE;
-            tower.y = row * TILE_SIZE;
-
             const border = Sprite.from(Texture.WHITE);
             border.tint = 0x000000;
             border.width = TILE_SIZE + 1;
             border.height = TILE_SIZE + 1;
-            tower.addChild(border);
+            border.x = col * TILE_SIZE;
+            border.y = row * TILE_SIZE;
+            towerLayer.addChild(border);
 
             const background = Sprite.from(Texture.WHITE);
             background.tint = 0xF8F8F8;
             background.width = TILE_SIZE - 1;
             background.height = TILE_SIZE - 1;
-            background.x = 1;
-            background.y = 1;
-            tower.addChild(background);
+            background.x = col * TILE_SIZE + 1;
+            background.y = row * TILE_SIZE + 1;
+            towerLayer.addChild(background);
 
-            towerLayer.addChild(tower);
-            towers.set(id, tower);
+            towers.set(id, [border, background]);
         }
         // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-explicit-any
         (window as any).create_tower = create_tower;
@@ -272,9 +289,9 @@ app.loader
         // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-explicit-any
         (window as any).recycle_explosion = recycle_explosion;
 
+        drawGrid(background);
 
         Promise.all([loadBackend, loadMemory]).then(([worldModule, memModule]) => {
-            drawGrid(background);
 
             // Some graphics functions read wasm memory, so we bind those parameters
 
@@ -284,25 +301,11 @@ app.loader
             const world = worldModule.World.new();
 
             // Input
-
-            let mouseRow = -1;
-            let mouseCol = -1;
-
-            app.view.addEventListener('mouseleave', () => {
-                recycleRange();
-                mouseRow = -1;
-                mouseCol = -1;
-            });
-
-            app.view.addEventListener('mousemove', event => {
-                const row = Math.floor(event.offsetY / TILE_SIZE);
-                const col = Math.floor(event.offsetX / TILE_SIZE);
-                if (row !== mouseRow || col !== mouseCol) {
-                    world.hover_map(0, row, col);
-                    mouseRow = row;
-                    mouseRow = col;
-                }
-            });
+            const mouseHoverPos = {
+                row: -1,
+                col: -1,
+            };
+            initGridInput(rendererContainer, mouseHoverPos, []);
 
             // game loop with fixed time step, variable rendering */
             let lastUpdateTime = window.performance.now();
@@ -317,9 +320,13 @@ app.loader
                 if (lag > MS_PER_UPDATE * MAX_UPDATES_PER_TICK) {
                     // Too much lag, just pretend it doesn't exist
                     lag = 0;
-                    world.render(0);
+                    // world.render(0); no point in rendering here?
                     // Don't even process input. Is this a good idea?
                     return;
+                }
+
+                if (mouseHoverPos.row >= 0 && mouseHoverPos.col >= 0) {
+                    world.hover_map(0, mouseHoverPos.row, mouseHoverPos.col);
                 }
 
                 let updates = 0;
@@ -334,9 +341,10 @@ app.loader
                 }
 
                 world.render(lag / MS_PER_UPDATE);
+                renderer.render(stage);
             }
 
-            app.ticker.add(gameTick);
+            ticker.add(gameTick);
         }).catch(console.error);
 
     });

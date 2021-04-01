@@ -28,10 +28,9 @@ export function recycleRange(): void {
     rope.visible = false;
 }
 
+(window as any).render_range = renderRange;
+(window as any).recycle_range = recycleRange;
+
 export function initRangeRendering(container: Container): void {
     container.addChild(rope);
-
-    (window as any).render_range = renderRange;
-
-    (window as any).recycle_range = recycleRange;
 }

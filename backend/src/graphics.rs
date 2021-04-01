@@ -1,11 +1,15 @@
 use wasm_bindgen::prelude::*;
 
-use crate::world::World;
+use crate::{smoke::SMOKE_TRAIL_LEN, world::World};
 
 #[wasm_bindgen]
 impl World {
     /// Call each renderable entity's render functions, which in turn call
     /// into the outside world (javascript) and render the game.
+    ///
+    /// This is mutable because of smoke trails: we pass data to js as an
+    /// array, and we need to store it in the world so that it doesn't get
+    /// dropped.
     pub fn render(&mut self, frame_fudge: f32) {
         for (&id, walker) in &self.walkers {
             walker.render(id, frame_fudge, &self);
@@ -29,12 +33,41 @@ impl World {
             indicator.render(id, frame_fudge, &self);
         }
     }
+
+    pub fn recreate(&self) {
+        for &id in self.walkers.keys() {
+            create_mob(id);
+        }
+        for &id in self.missiles.keys() {
+            create_missile(id);
+        }
+        for smoke_trail in self.smoke_trails.values() {
+            for renderer in &smoke_trail.renderers {
+                create_smoke_trail(renderer.id, SMOKE_TRAIL_LEN);
+            }
+        }
+        for &id in self.swallows.keys() {
+            create_swallow(id);
+        }
+        for &id in self.swallow_after_images.keys() {
+            create_swallow(id);
+        }
+        for &id in self.falcons.keys() {
+            create_falcon(id);
+        }
+        for (&id, indicator) in &self.target_indicators {
+            if indicator.falcons > 0 {
+                create_indicator(id);
+            }
+        }
+    }
 }
 
 #[wasm_bindgen]
 extern "C" {
     pub fn render_path_tile(row: usize, col: usize);
     pub fn render_path_border(row: usize, col: usize, horizontal: bool);
+    // pub fn cache_path();
 
     pub fn create_mob(id: u32);
     pub fn render_mob_position(id: u32, x: f32, y: f32);

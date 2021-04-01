@@ -8,7 +8,7 @@ use crate::{
     world::{EntityIds, Map, World},
 };
 
-const SMOKE_TRAIL_LEN: usize = 24;
+pub const SMOKE_TRAIL_LEN: usize = 24;
 
 pub struct SmokeTrail {
     parent: u32,
@@ -20,7 +20,7 @@ pub struct SmokeTrail {
     max_len: usize,
     // Smoke particles are ordered oldest to newest.
     particles: VecDeque<SmokeParticle>,
-    renderers: Vec<SmokeTrailRenderer>,
+    pub renderers: Vec<SmokeTrailRenderer>,
 }
 
 /// A single missile has a unique history of positions/velocities, hence it has
@@ -34,7 +34,7 @@ pub struct SmokeTrailRenderer {
     // Each renderer has a unique id so that it can be rendered. This id
     // isn't really an entity though, since renderers are stored in smoke
     // trails, not directly in the world.
-    id: u32,
+    pub id: u32,
     xs: Vec<f32>,
     ys: Vec<f32>,
     period_offset: f32,

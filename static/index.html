@@ -5,14 +5,66 @@
     <title>Nostalgia td</title>
     <meta charset="utf8" />
     <style>
-        canvas {
-            image-rendering: crisp-edges;
+        body {
+            margin: 32px 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        #grid {
+            width: 705px;
+            height: 577px;
+        }
+
+        #side {
+            background: #f8f8f8;
+            width: 256px;
+            height: 577px;
+            padding: 16px;
+            box-sizing: border-box;
+            border: 1px solid #888;
+            border-left: none;
+        }
+
+        #settings label {
+            display: block;
         }
     </style>
 </head>
 
 <body>
-
+    <div id="grid"></div>
+    <div id="side">
+        <div id="settings">
+            <h2>Settings</h2>
+            <label>
+                Resolution
+                <select id="resolution">
+                    <option selected value="Native">Native</option>
+                    <option value="Normal">Normal (1x)</option>
+                    <option value="High">High (2x)</option>
+                </select>
+            </label>
+            <label>
+                Anti-alias
+                <input id="antialias" type="checkbox" checked />
+            </label>
+            <label>
+                Image rendering
+                <select id="image-rendering">
+                    <option selected>auto</option>
+                    <option>crisp-edges</option>
+                    <option>pixelated</option>
+                </select>
+            </label>
+        </div>
+    </div>
+    <style id="canvas-style">
+        canvas {
+            image-rendering: crisp-edges;
+        }
+    </style>
     <script src="./bundle.js" type="module"></script>
 </body>
 
