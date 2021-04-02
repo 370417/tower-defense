@@ -5,12 +5,12 @@ use wasm_bindgen::prelude::*;
 use crate::{
     explosion::{Explosion, Impulse},
     falcon::{create_falcon_tower, Falcon, TargetIndicator},
-    graphics::{create_mob, recycle_range, render_mob_position, render_range},
+    graphics::{recycle_range, render_range, SpriteData},
     map::{
         distances::{generate_dist_from_entrance, generate_dist_from_exit, Distances},
         parse, render_map, tile_center, Constants, Tile, MAP_0, MAP_WIDTH,
     },
-    missile::{create_misile_tower, Missile, MissileSpawner},
+    missile::{create_missile_tower, Missile, MissileSpawner},
     mob::Mob,
     smoke::SmokeTrail,
     swallow::{create_swallow_tower, Swallow, SwallowAfterImage},
@@ -65,6 +65,8 @@ pub struct World {
     #[wasm_bindgen(skip)]
     pub smoke_trails: Map<u32, SmokeTrail>,
     #[wasm_bindgen(skip)]
+    pub sprite_data: SpriteData,
+    #[wasm_bindgen(skip)]
     pub swallow_after_images: Map<u32, SwallowAfterImage>,
     #[wasm_bindgen(skip)]
     pub swallows: Map<u32, Swallow>,
@@ -97,18 +99,12 @@ impl World {
         walkers.insert(mob_id, Walker { speed: 1.5 });
         impulses.insert(mob_id, Impulse { dx: 0.0, dy: 0.0 });
 
-        create_mob(mob_id);
-        render_mob_position(mob_id, mob_x, mob_y);
-
         let mob_id = entity_ids.next();
         let mob_x = f32::TILE_SIZE * -0.5;
         let mob_y = f32::TILE_SIZE * 2.5;
         mobs.insert(mob_id, Mob::new(mob_x, mob_y));
         walkers.insert(mob_id, Walker { speed: 1.5 });
         impulses.insert(mob_id, Impulse { dx: 0.0, dy: 0.0 });
-
-        create_mob(mob_id);
-        render_mob_position(mob_id, mob_x, mob_y);
 
         let mob_id = entity_ids.next();
         let mob_x = f32::TILE_SIZE * 1.5;
@@ -117,18 +113,12 @@ impl World {
         walkers.insert(mob_id, Walker { speed: 1.5 });
         impulses.insert(mob_id, Impulse { dx: 0.0, dy: 0.0 });
 
-        create_mob(mob_id);
-        render_mob_position(mob_id, mob_x, mob_y);
-
         let mob_id = entity_ids.next();
         let mob_x = f32::TILE_SIZE * 1.5;
         let mob_y = f32::TILE_SIZE * 2.5;
         mobs.insert(mob_id, Mob::new(mob_x, mob_y));
         walkers.insert(mob_id, Walker { speed: 1.5 });
         impulses.insert(mob_id, Impulse { dx: 0.0, dy: 0.0 });
-
-        create_mob(mob_id);
-        render_mob_position(mob_id, mob_x, mob_y);
 
         let mut towers = Default::default();
         let mut missile_spawners = Default::default();
@@ -147,9 +137,9 @@ impl World {
             &mut mobs,
         );
 
-        create_misile_tower(entity_ids.next(), 3, 6, &mut towers, &mut missile_spawners);
+        create_missile_tower(entity_ids.next(), 3, 6, &mut towers, &mut missile_spawners);
 
-        create_misile_tower(
+        create_missile_tower(
             entity_ids.next(),
             10,
             13,
@@ -175,6 +165,7 @@ impl World {
             missiles: Default::default(),
             mobs,
             smoke_trails: Default::default(),
+            sprite_data: Default::default(),
             swallow_after_images: Default::default(),
             swallows,
             target_indicators: Default::default(),

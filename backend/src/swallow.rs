@@ -8,7 +8,7 @@ use std::f32::consts::PI;
 use crate::{
     collision::circle_line_intersection,
     ease::ease_to_x_geometric,
-    graphics::{create_swallow, create_tower, recycle_swallow, render_swallow},
+    graphics::{create_tower, SpriteData, SWALLOW_ID},
     map::{tile_center, Constants},
     mob::Mob,
     targeting::{find_target, Targeting},
@@ -80,25 +80,49 @@ impl Swallow {
         }
     }
 
-    pub fn render(&self, id: u32, frame_fudge: f32, world: &World) {
-        if let Some(mob) = world.mobs.get(&id) {
-            let x = mob.x + frame_fudge * (mob.x - mob.old_x);
-            let y = mob.y + frame_fudge * (mob.y - mob.old_y);
-            render_swallow(id, x, y, self.rotation, 0.0);
+    // pub fn render(&self, id: u32, frame_fudge: f32, world: &World) {
+    //     if let Some(mob) = world.mobs.get(&id) {
+    //         let x = mob.x + frame_fudge * (mob.x - mob.old_x);
+    //         let y = mob.y + frame_fudge * (mob.y - mob.old_y);
+    //         render_swallow(id, x, y, self.rotation, 0.0);
+    //     }
+    // }
+
+    pub fn dump(&self, id: &u32, data: &mut SpriteData, mobs: &Map<u32, Mob>, frame_fudge: f32) {
+        if let Some(mob) = mobs.get(id) {
+            data.push(
+                SWALLOW_ID,
+                mob.x + frame_fudge * (mob.x - mob.old_x),
+                mob.y + frame_fudge * (mob.y - mob.old_y),
+                self.rotation,
+                1.0,
+                0x000000,
+            );
         }
     }
 }
 
 impl SwallowAfterImage {
-    pub fn render(&self, id: u32, frame_fudge: f32) {
-        render_swallow(
-            id,
+    pub fn dump(&self, data: &mut SpriteData, frame_fudge: f32) {
+        data.push(
+            SWALLOW_ID,
             self.x,
             self.y,
             self.rotation,
-            0.8 + 0.2 * (self.age as f32 + frame_fudge) / AFTER_IMAGE_DURATION as f32,
+            0.2 - 0.2 * (self.age as f32 + frame_fudge) / AFTER_IMAGE_DURATION as f32,
+            0x000000,
         );
     }
+
+    // pub fn render(&self, id: u32, frame_fudge: f32) {
+    //     render_swallow(
+    //         id,
+    //         self.x,
+    //         self.y,
+    //         self.rotation,
+    //         0.8 + 0.2 * (self.age as f32 + frame_fudge) / AFTER_IMAGE_DURATION as f32,
+    //     );
+    // }
 }
 
 pub fn create_swallow_tower(
@@ -126,7 +150,6 @@ pub fn create_swallow_tower(
     mobs.insert(swallow_entity, Mob::new(x, y));
 
     create_tower(tower_entity, row, col);
-    create_swallow(swallow_entity);
 }
 
 fn create_swallow_after_image(
@@ -135,7 +158,6 @@ fn create_swallow_after_image(
     swallow: &Swallow,
     swallow_after_images: &mut Map<u32, SwallowAfterImage>,
 ) {
-    create_swallow(entity);
     swallow_after_images.insert(
         entity,
         SwallowAfterImage {
@@ -282,7 +304,7 @@ impl World {
                                 rotation,
                                 swallow.max_turn_speed,
                                 swallow.rotation_accel,
-                                crate::ease::Domain::Radian,
+                                crate::ease::Domain::Radian { miss_adjust: 0.9 },
                             );
 
                             // We have to access the hashmap again to get a
@@ -309,9 +331,6 @@ impl World {
                             swallow.after_image_countdown = AFTER_IMAGE_PERIOD;
                         }
 
-                        // Theoretically, swallows should be able to migrate
-                        // to falcon towers as well, so we'll need a generic
-                        // tower eventually
                         if let Some(tower) = self.towers.get(&swallow.curr_tower) {
                             let (x, y) = tile_center(tower.row, tower.col);
 
@@ -346,7 +365,7 @@ impl World {
                                 f32::atan2(dy, dx),
                                 swallow.max_turn_speed,
                                 swallow.rotation_accel,
-                                crate::ease::Domain::Radian,
+                                crate::ease::Domain::Radian { miss_adjust: 0.9 },
                             );
 
                             // We have to access the hashmap again to get a
@@ -392,7 +411,6 @@ impl World {
         }
         for entity in trash {
             self.swallow_after_images.remove(&entity);
-            recycle_swallow(entity);
         }
     }
 }

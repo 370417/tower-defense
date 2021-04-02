@@ -23,15 +23,6 @@ pub fn ease_to_x_geometric(
     // Named after the r in a geometric series, and after resistance.
     let mut r = max_dx / (max_dx + ddx);
 
-    // let mut dist_to_target = target_x - *x;
-    // dist_to_target %= TAU;
-    // if dist_to_target > PI {
-    //     dist_to_target -= TAU;
-    // } else if dist_to_target < PI {
-    //     dist_to_target += TAU;
-    // }
-    // let target_x = *x + dist_to_target;
-
     // If we apply no acceleration, where will x come to rest?
     let brake_distance = *dx / (1.0 - r);
     let x_at_rest = *x + brake_distance;
@@ -40,7 +31,7 @@ pub fn ease_to_x_geometric(
     let mut ideal_ddx = target_x - x_at_rest;
 
     // Keep angles small
-    if let Domain::Radian = domain {
+    if let Domain::Radian { miss_adjust } = domain {
         ideal_ddx %= TAU;
         if ideal_ddx > PI {
             ideal_ddx -= TAU;
@@ -52,7 +43,7 @@ pub fn ease_to_x_geometric(
             // Increase turning radius after missing the target.
             // This gives a better approach angle after turning back to face
             // the target.
-            r *= 0.95;
+            r *= miss_adjust;
         }
     }
 
@@ -78,5 +69,9 @@ pub enum Domain {
     /// -inf to +inf
     NumberLine,
     /// -pi to +pi
-    Radian,
+    Radian {
+        // 1.0 to never adjust. Something like 0.95 to swing around wider after
+        // missing the target
+        miss_adjust: f32,
+    },
 }

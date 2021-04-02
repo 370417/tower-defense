@@ -1,10 +1,7 @@
 use std::f32::consts::PI;
 
 use crate::{
-    graphics::{
-        create_falcon, create_indicator, create_tower, recycle_indicator, render_falcon,
-        render_indicator,
-    },
+    graphics::{create_tower, SpriteData, FALCON_ID, INDICATOR_ID},
     map::{tile_center, true_row_col, Constants},
     mob::Mob,
     targeting::{find_target, Targeting},
@@ -64,38 +61,40 @@ impl Falcon {
         }
     }
 
-    pub fn render(&self, id: u32, frame_fudge: f32, world: &World) {
-        if let Some(mob) = world.mobs.get(&id) {
-            let x = mob.x + frame_fudge * (mob.x - mob.old_x);
+    pub fn dump(&self, id: &u32, data: &mut SpriteData, mobs: &Map<u32, Mob>, frame_fudge: f32) {
+        if let Some(mob) = mobs.get(id) {
             let height = self.height + frame_fudge * (self.height - self.old_height);
-            let y = mob.y + frame_fudge * (mob.y - mob.old_y);
-            if let FalconState::Recovering { countdown } = self.state {
-                render_falcon(
-                    id,
-                    x,
-                    y,
-                    self.rotation(),
-                    countdown as f32 / COOLDOWN as f32,
-                );
-            } else {
-                render_falcon(
-                    id,
-                    x,
-                    y - height,
-                    self.rotation(),
-                    falcon_fade(height / MAX_HEIGHT),
-                );
-            }
+            data.push(
+                FALCON_ID,
+                mob.x + frame_fudge * (mob.x - mob.old_x),
+                mob.y + frame_fudge * (mob.y - mob.old_y) - height,
+                self.rotation(),
+                match self.state {
+                    FalconState::Recovering { countdown } => {
+                        1.0 - countdown as f32 / COOLDOWN as f32
+                    }
+                    _ => 1.0 - falcon_fade(height / MAX_HEIGHT),
+                },
+                0x000000,
+            );
         }
     }
 }
 
 impl TargetIndicator {
-    pub fn render(&self, id: u32, frame_fudge: f32, world: &World) {
-        if let Some(mob) = world.mobs.get(&id) {
-            let x = mob.x + frame_fudge * (mob.x - mob.old_x);
-            let y = mob.y + frame_fudge * (mob.y - mob.old_y);
-            render_indicator(id, x, y);
+    pub fn dump(&self, id: &u32, data: &mut SpriteData, mobs: &Map<u32, Mob>, frame_fudge: f32) {
+        if self.falcons == 0 {
+            return;
+        }
+        if let Some(mob) = mobs.get(id) {
+            data.push(
+                INDICATOR_ID,
+                mob.x + frame_fudge * (mob.x - mob.old_x),
+                mob.y + frame_fudge * (mob.y - mob.old_y) - 0.5 * f32::TILE_SIZE,
+                0.0,
+                1.0,
+                0xffffff,
+            );
         }
     }
 }
@@ -124,7 +123,6 @@ pub fn create_falcon_tower(
     falcons.insert(falcon_entity, Falcon::new_rising(tower_entity));
     mobs.insert(falcon_entity, Mob::new(x, y));
 
-    create_falcon(falcon_entity);
     create_tower(tower_entity, row, col);
 }
 
@@ -150,9 +148,6 @@ impl World {
                             // Unmark the target
                             if let Some(indicator) = self.target_indicators.get_mut(&target) {
                                 indicator.falcons = indicator.falcons.saturating_sub(1);
-                                if indicator.falcons == 0 {
-                                    recycle_indicator(target);
-                                }
                             }
 
                             // Check to see if we have hit the target
@@ -232,9 +227,6 @@ impl World {
                                         .entry(target)
                                         .or_insert(TargetIndicator { falcons: 0 });
                                     indicator.falcons += 1;
-                                    if indicator.falcons == 1 {
-                                        create_indicator(target);
-                                    }
 
                                     continue;
                                 }

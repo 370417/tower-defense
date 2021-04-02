@@ -1,11 +1,9 @@
-import { Container, Graphics, Loader, ParticleContainer, Point, Renderer, SimpleRope, Sprite, Texture, Ticker } from 'pixi.js';
+/* eslint-disable @typescript-eslint/no-unsafe-member-access */
+import { Container, Filter, Graphics, Loader, ParticleContainer, Point, Renderer, SimpleRope, Sprite, Texture, Ticker } from 'pixi.js';
 import { MAP_WIDTH, TILE_SIZE, MAP_HEIGHT, MS_PER_UPDATE, MAX_UPDATES_PER_TICK } from './constants';
 import { initGridInput } from './input';
-import { initFalconRendering } from './render/falcon';
 import { drawGrid, initPathRendering } from './render/grid';
-import { initIndicatorRendering } from './render/indicator';
 import { initRangeRendering } from './render/range';
-import { initSwallowRendering } from './render/swallow';
 import './settings';
 
 const rendererContainer = document.getElementById('grid') as HTMLDivElement;
@@ -41,20 +39,27 @@ export function refreshRenderer(antialias: boolean, resolution: number): void {
 }
 
 loader
-    .add('circle', 'circle.png')
-    .add('swallow', 'swallow.png')
-    .add('falcon', 'falcon.png')
-    .add('indicator', 'exclamation.png')
+    .add('ice_shader', 'ice_shader.frag')
+    .add('spritesheet', 'texture-atlas.json')
     .load((loader, resources) => {
 
-        const circleTexture = resources.circle?.texture;
-        const swallowTexture = resources.swallow?.texture;
-        const falconTexture = resources.falcon?.texture;
-        const indicatorTexture = resources.indicator?.texture;
+        const spritesheet = resources.spritesheet?.spritesheet;
 
-        if (!circleTexture || !swallowTexture || !falconTexture || !indicatorTexture) {
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+        const iceShader = resources.ice_shader?.data;
+
+        if (
+            !iceShader ||
+            !spritesheet) {
             return;
         }
+
+        const swallowTexture = spritesheet.textures['swallow.png'] as Texture;
+        const circleTexture = spritesheet.textures['circle.png'] as Texture;
+        const falconTexture = spritesheet.textures['falcon.png'] as Texture;
+        const indicatorTexture = spritesheet.textures['exclamation.png'] as Texture;
+        const missileTexture = spritesheet.textures['missile.png'] as Texture;
+        const whiteTexture = spritesheet.textures['white.png'] as Texture;
 
         // Organize visuals by layer
 
@@ -73,14 +78,14 @@ loader
         const enemyLayer = new Container();
         stage.addChild(enemyLayer);
 
+        const spriteLayer = new Container();
+        stage.addChild(spriteLayer);
+
         const rangeLayer = new Container();
         stage.addChild(rangeLayer);
 
         initPathRendering(background);
-        initSwallowRendering(projectileLayer, swallowTexture);
-        initFalconRendering(projectileLayer, falconTexture);
         initRangeRendering(rangeLayer);
-        initIndicatorRendering(rangeLayer, indicatorTexture);
 
         const graphics = new Map<number, Container>();
 
@@ -127,44 +132,6 @@ loader
         }
         // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-explicit-any
         (window as any).create_tower = create_tower;
-
-        const missilePool: Sprite[] = [];
-
-        function create_missile(id: number) {
-            const missile = missilePool.pop() || Sprite.from(Texture.WHITE);
-            missile.visible = true;
-            missile.tint = 0x000000;
-            missile.width = 10;
-            missile.height = 7;
-            missile.anchor.x = 0;
-            missile.anchor.y = 0.5;
-            projectileLayer.addChild(missile);
-            graphics.set(id, missile);
-        }
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-explicit-any
-        (window as any).create_missile = create_missile;
-
-        function render_missile(id: number, x: number, y: number, rotation: number) {
-            const missile = graphics.get(id);
-            if (missile) {
-                missile.x = x;
-                missile.y = y;
-                missile.rotation = rotation;
-            }
-        }
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-explicit-any
-        (window as any).render_missile = render_missile;
-
-        function recycle_missile(id: number) {
-            const missile = graphics.get(id);
-            if (missile) {
-                missile.visible = false;
-                graphics.delete(id);
-                missilePool.push(missile as unknown as Sprite);
-            }
-        }
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-explicit-any
-        (window as any).recycle_missile = recycle_missile;
 
         type SmokeTrail = [SimpleRope, Point[]]
         const smokeTrails = new Map<number, SmokeTrail>();
@@ -298,7 +265,77 @@ loader
             // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-explicit-any
             (window as any).render_smoke_trail = render_smoke_trail.bind(undefined, memModule.memory);
 
+            const sprites: Sprite[] = [];
+
             const world = worldModule.World.new();
+
+            function render(frameFudge: number) {
+                world.dump_sprite_data(frameFudge);
+
+                const spriteCount = world.sprite_count();
+                const spriteIds = new Uint8Array(memModule.memory.buffer, world.sprite_id(), spriteCount);
+                const spriteXs = new Float32Array(memModule.memory.buffer, world.sprite_x(), spriteCount);
+                const spriteYs = new Float32Array(memModule.memory.buffer, world.sprite_y(), spriteCount);
+                const spriteRotations = new Float32Array(memModule.memory.buffer, world.sprite_rotation(), spriteCount);
+                const spriteAlphas = new Float32Array(memModule.memory.buffer, world.sprite_alpha(), spriteCount);
+                const spriteTints = new Uint32Array(memModule.memory.buffer, world.sprite_tint(), spriteCount);
+
+                for (let i = sprites.length; i < spriteCount; i++) {
+                    const sprite = new Sprite(swallowTexture);
+                    sprites.push(sprite);
+                    spriteLayer.addChild(sprite);
+                }
+                for (let i = 0; i < spriteCount; i++) {
+                    const sprite = sprites[i];
+                    sprite.visible = true;
+                    switch (spriteIds[i]) {
+                        case 0:
+                            sprite.texture = swallowTexture;
+                            sprite.width = 0.8 * TILE_SIZE;
+                            sprite.height = 0.8 * TILE_SIZE;
+                            sprite.anchor.set(0.5, 0.5);
+                            break;
+                        case 1:
+                            sprite.texture = missileTexture;
+                            sprite.width = 16;
+                            sprite.height = 8;
+                            sprite.anchor.set(0.5, 0.5);
+                            break;
+                        case 2:
+                            sprite.texture = falconTexture;
+                            sprite.width = 0.75 * TILE_SIZE;
+                            sprite.height = 0.75 * TILE_SIZE;
+                            sprite.anchor.set(0.5, 0.5);
+                            break;
+                        case 3:
+                            sprite.texture = circleTexture;
+                            sprite.width = 0.6 * TILE_SIZE;
+                            sprite.height = 0.6 * TILE_SIZE;
+                            sprite.anchor.set(0.5, 0.5);
+                            break;
+                        case 4:
+                            sprite.texture = indicatorTexture;
+                            sprite.width = 0.5 * TILE_SIZE;
+                            sprite.height = 0.5 * TILE_SIZE;
+                            sprite.anchor.set(0.5, 1.0);
+                            break;
+                        case 5:
+                            sprite.texture = whiteTexture;
+                            sprite.width = 10;
+                            sprite.height = 10;
+                            sprite.anchor.set(0.5, 0.5);
+                            break;
+                    }
+                    sprite.x = spriteXs[i];
+                    sprite.y = spriteYs[i];
+                    sprite.rotation = spriteRotations[i];
+                    sprite.alpha = spriteAlphas[i];
+                    sprite.tint = spriteTints[i];
+                }
+                for (let i = spriteCount; i < sprites.length; i++) {
+                    sprites[i].visible = false;
+                }
+            }
 
             // Input
             const mouseHoverPos = {
@@ -306,6 +343,10 @@ loader
                 col: -1,
             };
             initGridInput(rendererContainer, mouseHoverPos, []);
+
+            const filter = new Filter(undefined, iceShader, {
+                customUniform: 0.5,
+            });
 
             // game loop with fixed time step, variable rendering */
             let lastUpdateTime = window.performance.now();
@@ -341,6 +382,7 @@ loader
                 }
 
                 world.render(lag / MS_PER_UPDATE);
+                render(lag / MS_PER_UPDATE);
                 renderer.render(stage);
             }
 

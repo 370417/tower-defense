@@ -1,9 +1,11 @@
 //! Missiles and missile towers.
 
+use std::f32::{consts::PI, INFINITY};
+
 use crate::{
     ease::ease_to_x_geometric,
     explosion::spawn_explosion,
-    graphics::{create_missile, create_tower, recycle_missile, render_missile},
+    graphics::{create_tower, SpriteData, MISSILE_ID, MISSILE_TOWER_ID},
     map::{tile_center, Constants},
     mob::Mob,
     smoke::spawn_smoke_trail,
@@ -18,16 +20,18 @@ const MAX_TURN_SPEED: f32 = 0.13;
 const ACCELERATION: f32 = 0.31;
 const ROTATION_ACCEL: f32 = 0.05;
 
-// pub struct MissileTower {
-//     pub row: usize,
-//     pub col: usize,
-//     pub reload_countdown: u32,
-//     pub reload_cost: u32,
-// }
+const TOWER_MAX_TURN_SPEED: f32 = 0.05;
+const TOWER_ROTATION_ACCEL: f32 = 0.002;
+
+pub const MISSILE_WIDTH: f32 = 5.0;
+pub const MISSILE_LENGTH: f32 = 10.0;
 
 pub struct MissileSpawner {
-    pub reload_countdown: u32,
     pub reload_cost: u32,
+    pub rotation: f32,
+    pub rotation_speed: f32,
+    left_reload_countdown: u32,
+    right_reload_countdown: u32,
 }
 
 pub struct Missile {
@@ -41,7 +45,7 @@ pub struct Missile {
     pub acceleration: f32,
 }
 
-pub fn create_misile_tower(
+pub fn create_missile_tower(
     entity: u32,
     row: usize,
     col: usize,
@@ -59,8 +63,11 @@ pub fn create_misile_tower(
     spawners.insert(
         entity,
         MissileSpawner {
-            reload_countdown: 0,
+            left_reload_countdown: 0,
+            right_reload_countdown: 0,
             reload_cost: 60,
+            rotation: -PI / 2.0,
+            rotation_speed: 0.0,
         },
     );
 
@@ -71,50 +78,105 @@ fn spawn_missile(
     entity: u32,
     target: u32,
     tower: &Tower,
-    target_x: f32,
-    target_y: f32,
+    rotation: f32,
+    reloading_signum: f32,
     missiles: &mut Map<u32, Missile>,
     mobs: &mut Map<u32, Mob>,
 ) {
     let (tower_x, tower_y) = tile_center(tower.row, tower.col);
 
-    let rotation = (target_y - tower_y).atan2(target_x - tower_x);
     missiles.insert(entity, Missile::new(target, rotation));
-    mobs.insert(entity, Mob::new(tower_x, tower_y));
-    create_missile(entity);
+    mobs.insert(
+        entity,
+        Mob::new(
+            tower_x + reloading_signum * rotation.sin() * MISSILE_WIDTH * 0.5,
+            tower_y - reloading_signum * rotation.cos() * MISSILE_WIDTH * 0.5,
+        ),
+    );
 }
 
 impl World {
     pub fn operate_missile_towers(&mut self) {
         for (entity, spawner) in &mut self.missile_spawners {
             if let Some(tower) = self.towers.get(entity) {
-                if spawner.reload_countdown > 0 {
-                    spawner.reload_countdown -= 1;
-                } else {
-                    let (tower_x, tower_y) = tile_center(tower.row, tower.col);
-                    if let Some((target, target_x, target_y)) = find_target(
+                let (tower_x, tower_y) = tile_center(tower.row, tower.col);
+
+                let first_mob_in_range = find_target(
+                    tower_x,
+                    tower_y,
+                    tower.range,
+                    Targeting::First,
+                    &self.walkers,
+                    &self.mobs,
+                    &self.map,
+                    &self.dist_from_entrance,
+                    &self.dist_from_exit,
+                );
+
+                let target_else_closest_mob = match first_mob_in_range {
+                    None => find_target(
                         tower_x,
                         tower_y,
-                        tower.range,
-                        Targeting::First,
+                        Range::Circle { radius: INFINITY },
+                        Targeting::Close,
                         &self.walkers,
                         &self.mobs,
                         &self.map,
                         &self.dist_from_entrance,
                         &self.dist_from_exit,
-                    ) {
+                    ),
+                    some => some,
+                };
+
+                let goal_rotation = match target_else_closest_mob {
+                    Some((_, x, y)) => f32::atan2(y - tower_y, x - tower_x),
+                    None => spawner.rotation,
+                };
+
+                ease_to_x_geometric(
+                    &mut spawner.rotation,
+                    &mut spawner.rotation_speed,
+                    goal_rotation,
+                    TOWER_MAX_TURN_SPEED,
+                    TOWER_ROTATION_ACCEL,
+                    crate::ease::Domain::Radian { miss_adjust: 1.0 },
+                );
+
+                if spawner.right_reload_countdown > 0 {
+                    spawner.right_reload_countdown -= 1;
+                } else if spawner.left_reload_countdown <= 0 {
+                    if let Some((target, _, _)) = first_mob_in_range {
                         let entity = self.entity_ids.next();
                         spawn_missile(
                             entity,
                             target,
                             tower,
-                            target_x,
-                            target_y,
+                            spawner.rotation,
+                            1.0,
                             &mut self.missiles,
                             &mut self.mobs,
                         );
                         spawn_smoke_trail(&mut self.entity_ids, &mut self.smoke_trails, entity);
-                        spawner.reload_countdown = spawner.reload_cost;
+                        spawner.right_reload_countdown = spawner.reload_cost;
+                    }
+                }
+
+                if spawner.left_reload_countdown > 0 {
+                    spawner.left_reload_countdown -= 1;
+                } else if spawner.right_reload_countdown <= 0 {
+                    if let Some((target, _, _)) = first_mob_in_range {
+                        let entity = self.entity_ids.next();
+                        spawn_missile(
+                            entity,
+                            target,
+                            tower,
+                            spawner.rotation,
+                            -1.0,
+                            &mut self.missiles,
+                            &mut self.mobs,
+                        );
+                        spawn_smoke_trail(&mut self.entity_ids, &mut self.smoke_trails, entity);
+                        spawner.left_reload_countdown = spawner.reload_cost;
                     }
                 }
             }
@@ -138,10 +200,11 @@ impl World {
                     // Check for collision
                     // The tip of a missile extends out in front of its
                     // x,y position.
-                    let missile_length = 10.0;
                     let target_radius = STANDARD_ENEMY_RADIUS;
-                    let missile_tip_x = missile_mob.x + missile_length * missile.rotation.cos();
-                    let missile_tip_y = missile_mob.y + missile_length * missile.rotation.sin();
+                    let missile_tip_x =
+                        missile_mob.x + MISSILE_LENGTH * 0.5 * missile.rotation.cos();
+                    let missile_tip_y =
+                        missile_mob.y + MISSILE_LENGTH * 0.5 * missile.rotation.sin();
                     let distance_squared = (target_x - missile_tip_x) * (target_x - missile_tip_x)
                         + (target_y - missile_tip_y) * (target_y - missile_tip_y);
                     if distance_squared < (target_radius * target_radius) as f32 {
@@ -165,7 +228,7 @@ impl World {
                         rotation,
                         missile.max_turn_speed,
                         missile.rotation_acceleration,
-                        crate::ease::Domain::Radian,
+                        crate::ease::Domain::Radian { miss_adjust: 0.95 },
                     );
 
                     missile.speed += missile.acceleration;
@@ -181,7 +244,6 @@ impl World {
         for entity in trash {
             self.missiles.remove(&entity);
             self.mobs.remove(&entity);
-            recycle_missile(entity);
         }
     }
 }
@@ -200,11 +262,58 @@ impl Missile {
         }
     }
 
-    pub fn render(&self, id: u32, frame_fudge: f32, world: &World) {
-        if let Some(mob) = world.mobs.get(&id) {
-            let x = mob.x + frame_fudge * (mob.x - mob.old_x);
-            let y = mob.y + frame_fudge * (mob.y - mob.old_y);
-            render_missile(id, x, y, self.rotation);
+    pub fn dump(&self, id: &u32, data: &mut SpriteData, mobs: &Map<u32, Mob>, frame_fudge: f32) {
+        if let Some(mob) = mobs.get(id) {
+            data.push(
+                MISSILE_ID,
+                mob.x + frame_fudge * (mob.x - mob.old_x),
+                mob.y + frame_fudge * (mob.y - mob.old_y),
+                self.rotation,
+                1.0,
+                0x000000,
+            );
+        }
+    }
+}
+
+impl MissileSpawner {
+    pub fn dump(&self, id: &u32, data: &mut SpriteData, towers: &Map<u32, Tower>) {
+        if let Some(tower) = towers.get(id) {
+            let (tower_x, tower_y) = tile_center(tower.row, tower.col);
+            let cos = self.rotation.cos();
+            let sin = self.rotation.sin();
+
+            let left_peek = 3.0 - 3.0 * self.left_reload_countdown as f32 / self.reload_cost as f32;
+            let right_peek =
+                3.0 - 3.0 * self.right_reload_countdown as f32 / self.reload_cost as f32;
+            let recoil_amount = (3.0 - left_peek.min(right_peek)) / 3.0;
+
+            data.push(
+                MISSILE_ID,
+                tower_x + MISSILE_WIDTH * 0.5 * sin + (right_peek - recoil_amount) * cos,
+                tower_y - MISSILE_WIDTH * 0.5 * cos + (right_peek - recoil_amount) * sin,
+                self.rotation,
+                1.0,
+                0x000000,
+            );
+
+            data.push(
+                MISSILE_ID,
+                tower_x - MISSILE_WIDTH * 0.5 * sin + (left_peek - recoil_amount) * cos,
+                tower_y + MISSILE_WIDTH * 0.5 * cos + (left_peek - recoil_amount) * sin,
+                self.rotation,
+                1.0,
+                0x000000,
+            );
+
+            data.push(
+                MISSILE_TOWER_ID,
+                tower_x - recoil_amount * cos,
+                tower_y - recoil_amount * sin,
+                self.rotation,
+                1.0,
+                0x000000,
+            )
         }
     }
 }

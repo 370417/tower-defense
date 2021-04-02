@@ -2,8 +2,102 @@ use wasm_bindgen::prelude::*;
 
 use crate::{smoke::SMOKE_TRAIL_LEN, world::World};
 
+#[derive(Default)]
+pub struct SpriteData {
+    pub sprite_id: Vec<u8>,
+    pub x: Vec<f32>,
+    pub y: Vec<f32>,
+    pub rotation: Vec<f32>,
+    pub alpha: Vec<f32>,
+    pub tint: Vec<u32>,
+}
+
+impl SpriteData {
+    fn clear(&mut self) {
+        self.sprite_id.clear();
+        self.x.clear();
+        self.y.clear();
+        self.rotation.clear();
+        self.alpha.clear();
+        self.tint.clear();
+    }
+
+    pub fn push(&mut self, sprite_id: u8, x: f32, y: f32, rotation: f32, alpha: f32, tint: u32) {
+        self.sprite_id.push(sprite_id);
+        self.x.push(x);
+        self.y.push(y);
+        self.rotation.push(rotation);
+        self.alpha.push(alpha);
+        self.tint.push(tint);
+    }
+}
+
+pub const SWALLOW_ID: u8 = 0;
+pub const MISSILE_ID: u8 = 1;
+pub const FALCON_ID: u8 = 2;
+pub const WALKER_ID: u8 = 3;
+pub const INDICATOR_ID: u8 = 4;
+pub const MISSILE_TOWER_ID: u8 = 5;
+
+pub struct RopeData {}
+
 #[wasm_bindgen]
 impl World {
+    pub fn sprite_count(&self) -> usize {
+        self.sprite_data.sprite_id.len()
+    }
+
+    pub fn sprite_id(&self) -> *const u8 {
+        self.sprite_data.sprite_id.as_ptr()
+    }
+
+    pub fn sprite_x(&self) -> *const f32 {
+        self.sprite_data.x.as_ptr()
+    }
+
+    pub fn sprite_y(&self) -> *const f32 {
+        self.sprite_data.y.as_ptr()
+    }
+
+    pub fn sprite_rotation(&self) -> *const f32 {
+        self.sprite_data.rotation.as_ptr()
+    }
+
+    pub fn sprite_alpha(&self) -> *const f32 {
+        self.sprite_data.alpha.as_ptr()
+    }
+
+    pub fn sprite_tint(&self) -> *const u32 {
+        self.sprite_data.tint.as_ptr()
+    }
+
+    pub fn dump_sprite_data(&mut self, frame_fudge: f32) {
+        // Order matters: sprites pushed first get rendered in the back.
+        self.sprite_data.clear();
+
+        for swallow in self.swallow_after_images.values() {
+            swallow.dump(&mut self.sprite_data, frame_fudge);
+        }
+        for (id, swallow) in &self.swallows {
+            swallow.dump(id, &mut self.sprite_data, &self.mobs, frame_fudge);
+        }
+        for (id, missile) in &self.missiles {
+            missile.dump(id, &mut self.sprite_data, &self.mobs, frame_fudge);
+        }
+        for (id, spawner) in &self.missile_spawners {
+            spawner.dump(id, &mut self.sprite_data, &mut self.towers);
+        }
+        for (id, walker) in &self.walkers {
+            walker.dump(id, &mut self.sprite_data, &self.mobs, frame_fudge);
+        }
+        for (id, falcon) in &self.falcons {
+            falcon.dump(id, &mut self.sprite_data, &self.mobs, frame_fudge);
+        }
+        for (id, indicator) in &self.target_indicators {
+            indicator.dump(id, &mut self.sprite_data, &self.mobs, frame_fudge);
+        }
+    }
+
     /// Call each renderable entity's render functions, which in turn call
     /// into the outside world (javascript) and render the game.
     ///
@@ -11,54 +105,8 @@ impl World {
     /// array, and we need to store it in the world so that it doesn't get
     /// dropped.
     pub fn render(&mut self, frame_fudge: f32) {
-        for (&id, walker) in &self.walkers {
-            walker.render(id, frame_fudge, &self);
-        }
-        for (&id, missile) in &self.missiles {
-            missile.render(id, frame_fudge, &self);
-        }
         for (&_id, smoke_trail) in &mut self.smoke_trails {
             smoke_trail.render(frame_fudge, self.tick);
-        }
-        for (&id, swallow) in &self.swallows {
-            swallow.render(id, frame_fudge, &self);
-        }
-        for (&id, after_image) in &self.swallow_after_images {
-            after_image.render(id, frame_fudge);
-        }
-        for (&id, falcon) in &self.falcons {
-            falcon.render(id, frame_fudge, &self);
-        }
-        for (&id, indicator) in &self.target_indicators {
-            indicator.render(id, frame_fudge, &self);
-        }
-    }
-
-    pub fn recreate(&self) {
-        for &id in self.walkers.keys() {
-            create_mob(id);
-        }
-        for &id in self.missiles.keys() {
-            create_missile(id);
-        }
-        for smoke_trail in self.smoke_trails.values() {
-            for renderer in &smoke_trail.renderers {
-                create_smoke_trail(renderer.id, SMOKE_TRAIL_LEN);
-            }
-        }
-        for &id in self.swallows.keys() {
-            create_swallow(id);
-        }
-        for &id in self.swallow_after_images.keys() {
-            create_swallow(id);
-        }
-        for &id in self.falcons.keys() {
-            create_falcon(id);
-        }
-        for (&id, indicator) in &self.target_indicators {
-            if indicator.falcons > 0 {
-                create_indicator(id);
-            }
         }
     }
 }
@@ -67,16 +115,8 @@ impl World {
 extern "C" {
     pub fn render_path_tile(row: usize, col: usize);
     pub fn render_path_border(row: usize, col: usize, horizontal: bool);
-    // pub fn cache_path();
-
-    pub fn create_mob(id: u32);
-    pub fn render_mob_position(id: u32, x: f32, y: f32);
 
     pub fn create_tower(id: u32, row: usize, col: usize);
-
-    pub fn create_missile(id: u32);
-    pub fn render_missile(id: u32, x: f32, y: f32, rotation: f32);
-    pub fn recycle_missile(id: u32);
 
     pub fn create_smoke_trail(id: u32, max_length: usize);
     pub fn render_smoke_trail(id: u32, x_ptr: *const f32, y_ptr: *const f32);
@@ -85,18 +125,6 @@ extern "C" {
     pub fn create_explosion(id: u32, x: f32, y: f32);
     pub fn render_explosion(id: u32, radius: f32, alpha: f32);
     pub fn recycle_explosion(id: u32);
-
-    pub fn create_swallow(id: u32);
-    pub fn render_swallow(id: u32, x: f32, y: f32, rotation: f32, fade: f32);
-    pub fn recycle_swallow(id: u32);
-
-    pub fn create_falcon(id: u32);
-    pub fn render_falcon(id: u32, x: f32, y: f32, rotation: f32, fade: f32);
-    pub fn recycle_falcon(id: u32);
-
-    pub fn create_indicator(id: u32);
-    pub fn render_indicator(id: u32, x: f32, y: f32);
-    pub fn recycle_indicator(id: u32);
 
     pub fn render_range(x: f32, y: f32, radius: f32);
     pub fn recycle_range();

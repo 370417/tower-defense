@@ -1,8 +1,9 @@
 use crate::{
     distance::fast_distance,
-    graphics::render_mob_position,
+    graphics::{SpriteData, WALKER_ID},
     map::{true_row_col, Constants, Tile, TRUE_MAP_WIDTH},
-    world::World,
+    mob::Mob,
+    world::{Map, World},
 };
 
 pub const STANDARD_ENEMY_RADIUS: f32 = 0.3 * f32::TILE_SIZE;
@@ -13,11 +14,16 @@ pub struct Walker {
 }
 
 impl Walker {
-    pub fn render(&self, entity: u32, frame_fudge: f32, world: &World) {
-        if let Some(mob) = world.mobs.get(&entity) {
-            let x = mob.x + frame_fudge * (mob.x - mob.old_x);
-            let y = mob.y + frame_fudge * (mob.y - mob.old_y);
-            render_mob_position(entity, x, y);
+    pub fn dump(&self, id: &u32, data: &mut SpriteData, mobs: &Map<u32, Mob>, frame_fudge: f32) {
+        if let Some(mob) = mobs.get(id) {
+            data.push(
+                WALKER_ID,
+                mob.x + frame_fudge * (mob.x - mob.old_x),
+                mob.y + frame_fudge * (mob.y - mob.old_y),
+                0.0,
+                1.0,
+                0x777777,
+            );
         }
     }
 }

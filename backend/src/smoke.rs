@@ -5,10 +5,12 @@ use std::{collections::VecDeque, f32::consts::TAU};
 use crate::{
     distance::fast_distance,
     graphics::{create_smoke_trail, recycle_smoke_trail, render_smoke_trail},
+    missile::MISSILE_WIDTH,
     world::{EntityIds, Map, World},
 };
 
 pub const SMOKE_TRAIL_LEN: usize = 24;
+const SMOKE_WIDTH: f32 = 2.0;
 
 pub struct SmokeTrail {
     parent: u32,
@@ -117,13 +119,13 @@ impl SmokeTrail {
                 }
                 for renderer in &mut self.renderers {
                     renderer.xs[i] = x
-                        + (3.0 + 0.6 * age)
+                        + ((MISSILE_WIDTH - SMOKE_WIDTH) / 2.0 + 0.6 * age)
                             * (renderer.period_offset
                                 + particle.birth_tick as f32 * renderer.frequency)
                                 .sin()
                             * particle.normal_x;
                     renderer.ys[i] = y
-                        + (3.0 + 0.6 * age)
+                        + ((MISSILE_WIDTH - SMOKE_WIDTH) / 2.0 + 0.6 * age)
                             * (renderer.period_offset
                                 + particle.birth_tick as f32 * renderer.frequency)
                                 .sin()
@@ -146,8 +148,8 @@ impl World {
             if let (Some(mob), Some(missile)) = (parent_mob, parent_missile) {
                 smoke_trail.particles.push_back(SmokeParticle {
                     birth_tick: self.tick,
-                    x: mob.x,
-                    y: mob.y,
+                    x: mob.x - 5.0 * missile.rotation.cos(),
+                    y: mob.y - 5.0 * missile.rotation.sin(),
                     normal_x: -missile.rotation.sin(),
                     normal_y: missile.rotation.cos(),
                 });

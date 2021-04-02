@@ -19,7 +19,7 @@
 
         #side {
             background: #f8f8f8;
-            width: 256px;
+            width: 213px;
             height: 577px;
             padding: 16px;
             box-sizing: border-box;
@@ -30,12 +30,49 @@
         #settings label {
             display: block;
         }
+
+        #tower-select {
+            display: grid;
+            height: 168px;
+            grid-template-columns: repeat(4, 33px);
+            grid-template-rows: repeat(4, 1fr);
+            justify-content: space-between;
+        }
+
+        .tower {
+            width: 31px;
+            height: 31px;
+            border: 1px solid #000;
+        }
     </style>
 </head>
 
 <body>
     <div id="grid"></div>
     <div id="side">
+        <div id="towers">
+            <div id="tower-select">
+                <div class="tower"></div>
+                <div class="tower"></div>
+                <div class="tower"></div>
+                <div class="tower"></div>
+                <div class="tower"></div>
+                <div class="tower"></div>
+                <div class="tower"></div>
+                <div class="tower"></div>
+                <div class="tower"></div>
+                <div class="tower"></div>
+                <div class="tower"></div>
+                <div class="tower"></div>
+                <div class="tower"></div>
+                <div class="tower"></div>
+                <div class="tower"></div>
+                <div class="tower"></div>
+            </div>
+            <strong>Swallow Tower</strong>
+            <div>Max DPS: ~30</div>
+            <div>Range: 2.6</div>
+        </div>
         <div id="settings">
             <h2>Settings</h2>
             <label>
