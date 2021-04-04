@@ -5,6 +5,7 @@ import { initGridInput } from './input';
 import { drawGrid, initPathRendering } from './render/grid';
 import { initRangeRendering } from './render/range';
 import './settings';
+import './ice';
 
 const rendererContainer = document.getElementById('grid') as HTMLDivElement;
 
@@ -41,12 +42,15 @@ export function refreshRenderer(antialias: boolean, resolution: number): void {
 loader
     .add('ice_shader', 'ice_shader.frag')
     .add('spritesheet', 'texture-atlas.json')
+    .add('ice', 'ice.png')
     .load((loader, resources) => {
 
         const spritesheet = resources.spritesheet?.spritesheet;
 
         // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
         const iceShader = resources.ice_shader?.data;
+
+        const iceTexture = resources.ice?.texture as Texture;
 
         if (
             !iceShader ||
@@ -65,6 +69,31 @@ loader
 
         const background = new ParticleContainer();
         stage.addChild(background);
+
+
+
+
+        const s0 = new Sprite(circleTexture);
+        s0.width = 2 * 2.6 * TILE_SIZE;
+        s0.height = 2 * 2.6 * TILE_SIZE;
+        s0.tint = 0x000000;
+        s0.alpha = 0.05;
+        s0.anchor.set(0.5, 0.5);
+        s0.x = 400;
+        s0.y = 400;
+        // stage.addChild(s0);
+
+        const filter = new Filter(undefined, iceShader, {
+            customUniform: 0.5,
+        });
+        const s = new Sprite(iceTexture);
+        s.width = 2 * 2.6 * TILE_SIZE;
+        s.height = 2 * 2.6 * TILE_SIZE;
+        s.filters = [filter];
+        s.anchor.set(0.5, 0.5);
+        s.x = 400;
+        s.y = 400;
+        stage.addChild(s);
 
         const towerLayer = new Container();
         stage.addChild(towerLayer);
@@ -344,10 +373,6 @@ loader
             };
             initGridInput(rendererContainer, mouseHoverPos, []);
 
-            const filter = new Filter(undefined, iceShader, {
-                customUniform: 0.5,
-            });
-
             // game loop with fixed time step, variable rendering */
             let lastUpdateTime = window.performance.now();
             let lag = 0;
@@ -380,6 +405,10 @@ loader
                         return;
                     }
                 }
+
+                filter.uniforms.customUniform += 0.02;
+                filter.uniforms.customUniform %= 3.0;
+                // s.rotation += 0.02;
 
                 world.render(lag / MS_PER_UPDATE);
                 render(lag / MS_PER_UPDATE);

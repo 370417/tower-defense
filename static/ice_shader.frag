@@ -12,14 +12,11 @@ void main(void)
 
     vec4 fg = texture2D(uSampler, vTextureCoord);
 
-    float val = fg.r > customUniform ? 1.0 : 0.0; // * fg.a
+    float value = fg.a > 0.35 && fg.r < customUniform * fg.a ? 1.0 : 0.0;
 
-    fg.r = val;
-    fg.g = val;
-    fg.b = val;
+    // float blueness = smoothstep(customUniform * fg.a - 0.15, customUniform * fg.a, fg.r);
+    float greenness = smoothstep(customUniform * fg.a - 0.15, customUniform * fg.a, fg.r);
 
-    //fg.r = clamp(fg.r,0.0,0.9);
-
-    gl_FragColor = fg;
-
+    // gl_FragColor = vec4(value * (1.0 - 0.35 * blueness), value * (1.0 - 0.15 * blueness), value, value);
+    gl_FragColor = vec4(value * (0.6 + 0.25 * greenness), value * (0.45 + 0.2 * greenness), value * (0.1 * greenness), value);
 }
