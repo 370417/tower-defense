@@ -5,11 +5,11 @@ use std::f32::{consts::PI, INFINITY};
 use crate::{
     ease::ease_to_x_geometric,
     explosion::spawn_explosion,
-    graphics::{create_tower, SpriteData, MISSILE_ID, MISSILE_TOWER_ID},
+    graphics::{SpriteData, SpriteType},
     map::{tile_center, Constants},
     mob::Mob,
     smoke::spawn_smoke_trail,
-    targeting::{find_target, Targeting},
+    targeting::{find_target, Targeting, Threat, THREAT_DISTANCE},
     tower::{Range, Tower},
     walker::STANDARD_ENEMY_RADIUS,
     world::{Map, World},
@@ -21,7 +21,9 @@ const ACCELERATION: f32 = 0.31;
 const ROTATION_ACCEL: f32 = 0.05;
 
 const TOWER_MAX_TURN_SPEED: f32 = 0.05;
-const TOWER_ROTATION_ACCEL: f32 = 0.002;
+const TOWER_ROTATION_ACCEL: f32 = 0.0025;
+
+const SLOW_TURN_DURATION: u32 = 300;
 
 pub const MISSILE_WIDTH: f32 = 5.0;
 pub const MISSILE_LENGTH: f32 = 10.0;
@@ -43,6 +45,7 @@ pub struct Missile {
     pub speed: f32,
     pub max_speed: f32,
     pub acceleration: f32,
+    pub age: u32,
 }
 
 pub fn create_missile_tower(
@@ -70,8 +73,6 @@ pub fn create_missile_tower(
             rotation_speed: 0.0,
         },
     );
-
-    create_tower(entity, row, col);
 }
 
 fn spawn_missile(
@@ -191,6 +192,7 @@ impl World {
     pub fn fly_missiles(&mut self) {
         let mut trash = Vec::new();
         for (&entity, missile) in &mut self.missiles {
+            missile.age += 1;
             if let Some(target_mob) = self.mobs.get(&missile.target) {
                 // Copy target's coordinates to satisfy borrow checker
                 let target_x = target_mob.x;
@@ -217,17 +219,28 @@ impl World {
                         );
                         trash.push(entity);
                         continue;
+                    } else if distance_squared < THREAT_DISTANCE * THREAT_DISTANCE {
+                        // Add threat to mobs
+                        self.threats.insert(missile.target, Threat {});
                     }
 
                     // Aim toward the target
                     let rotation = f32::atan2(target_y - missile_mob.y, target_x - missile_mob.x);
+
+                    // Rotation is slower when the missile is young
+                    let rotation_accel = if missile.age >= SLOW_TURN_DURATION {
+                        missile.rotation_acceleration
+                    } else {
+                        missile.rotation_acceleration
+                            * (0.2 + 0.8 * missile.age as f32 / SLOW_TURN_DURATION as f32)
+                    };
 
                     ease_to_x_geometric(
                         &mut missile.rotation,
                         &mut missile.rotation_speed,
                         rotation,
                         missile.max_turn_speed,
-                        missile.rotation_acceleration,
+                        rotation_accel,
                         crate::ease::Domain::Radian { miss_adjust: 0.95 },
                     );
 
@@ -259,13 +272,14 @@ impl Missile {
             max_speed: MAX_SPEED,
             speed: 0.0,
             acceleration: ACCELERATION,
+            age: 0,
         }
     }
 
     pub fn dump(&self, id: &u32, data: &mut SpriteData, mobs: &Map<u32, Mob>, frame_fudge: f32) {
         if let Some(mob) = mobs.get(id) {
             data.push(
-                MISSILE_ID,
+                SpriteType::Missile as u8,
                 mob.x + frame_fudge * (mob.x - mob.old_x),
                 mob.y + frame_fudge * (mob.y - mob.old_y),
                 self.rotation,
@@ -283,13 +297,22 @@ impl MissileSpawner {
             let cos = self.rotation.cos();
             let sin = self.rotation.sin();
 
+            data.push(
+                SpriteType::TowerBase as u8,
+                tower_x,
+                tower_y,
+                0.0,
+                1.0,
+                0xf5bec5,
+            );
+
             let left_peek = 3.0 - 3.0 * self.left_reload_countdown as f32 / self.reload_cost as f32;
             let right_peek =
                 3.0 - 3.0 * self.right_reload_countdown as f32 / self.reload_cost as f32;
             let recoil_amount = (3.0 - left_peek.min(right_peek)) / 3.0;
 
             data.push(
-                MISSILE_ID,
+                SpriteType::Missile as u8,
                 tower_x + MISSILE_WIDTH * 0.5 * sin + (right_peek - recoil_amount) * cos,
                 tower_y - MISSILE_WIDTH * 0.5 * cos + (right_peek - recoil_amount) * sin,
                 self.rotation,
@@ -298,7 +321,7 @@ impl MissileSpawner {
             );
 
             data.push(
-                MISSILE_ID,
+                SpriteType::Missile as u8,
                 tower_x - MISSILE_WIDTH * 0.5 * sin + (left_peek - recoil_amount) * cos,
                 tower_y + MISSILE_WIDTH * 0.5 * cos + (left_peek - recoil_amount) * sin,
                 self.rotation,
@@ -307,7 +330,7 @@ impl MissileSpawner {
             );
 
             data.push(
-                MISSILE_TOWER_ID,
+                SpriteType::MissileTower as u8,
                 tower_x - recoil_amount * cos,
                 tower_y - recoil_amount * sin,
                 self.rotation,

@@ -32,12 +32,17 @@ impl SpriteData {
     }
 }
 
-pub const SWALLOW_ID: u8 = 0;
-pub const MISSILE_ID: u8 = 1;
-pub const FALCON_ID: u8 = 2;
-pub const WALKER_ID: u8 = 3;
-pub const INDICATOR_ID: u8 = 4;
-pub const MISSILE_TOWER_ID: u8 = 5;
+#[wasm_bindgen]
+#[repr(u8)]
+pub enum SpriteType {
+    Swallow,
+    Missile,
+    Falcon,
+    Walker,
+    Indicator,
+    MissileTower,
+    TowerBase,
+}
 
 pub struct RopeData {}
 
@@ -75,6 +80,13 @@ impl World {
         // Order matters: sprites pushed first get rendered in the back.
         self.sprite_data.clear();
 
+        for (id, targeter) in &self.swallow_targeters {
+            targeter.dump(id, &mut self.sprite_data, &self.towers);
+        }
+        for (id, spawner) in &self.missile_spawners {
+            spawner.dump(id, &mut self.sprite_data, &self.towers);
+        }
+
         for swallow in self.swallow_after_images.values() {
             swallow.dump(&mut self.sprite_data, frame_fudge);
         }
@@ -84,9 +96,6 @@ impl World {
         for (id, missile) in &self.missiles {
             missile.dump(id, &mut self.sprite_data, &self.mobs, frame_fudge);
         }
-        for (id, spawner) in &self.missile_spawners {
-            spawner.dump(id, &mut self.sprite_data, &mut self.towers);
-        }
         for (id, walker) in &self.walkers {
             walker.dump(id, &mut self.sprite_data, &self.mobs, frame_fudge);
         }
@@ -95,6 +104,15 @@ impl World {
         }
         for (id, indicator) in &self.target_indicators {
             indicator.dump(id, &mut self.sprite_data, &self.mobs, frame_fudge);
+        }
+
+        // Shift everything half a pixel to account for the 1px borders between
+        // tiles.
+        for x in &mut self.sprite_data.x {
+            *x += 0.5;
+        }
+        for y in &mut self.sprite_data.y {
+            *y += 0.5;
         }
     }
 
@@ -115,8 +133,6 @@ impl World {
 extern "C" {
     pub fn render_path_tile(row: usize, col: usize);
     pub fn render_path_border(row: usize, col: usize, horizontal: bool);
-
-    pub fn create_tower(id: u32, row: usize, col: usize);
 
     pub fn create_smoke_trail(id: u32, max_length: usize);
     pub fn render_smoke_trail(id: u32, x_ptr: *const f32, y_ptr: *const f32);

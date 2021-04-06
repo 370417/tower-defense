@@ -1,11 +1,13 @@
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 import { Container, Filter, Graphics, Loader, ParticleContainer, Point, Renderer, SimpleRope, Sprite, Texture, Ticker } from 'pixi.js';
 import { MAP_WIDTH, TILE_SIZE, MAP_HEIGHT, MS_PER_UPDATE, MAX_UPDATES_PER_TICK } from './constants';
+import { gameSpeed, isPaused } from './game-speed';
 import { initGridInput } from './input';
 import { drawGrid, initPathRendering } from './render/grid';
 import { initRangeRendering } from './render/range';
 import './settings';
-import './ice';
+import './tower-select';
+// import './ice';
 
 const rendererContainer = document.getElementById('grid') as HTMLDivElement;
 
@@ -64,6 +66,7 @@ loader
         const indicatorTexture = spritesheet.textures['exclamation.png'] as Texture;
         const missileTexture = spritesheet.textures['missile.png'] as Texture;
         const whiteTexture = spritesheet.textures['white.png'] as Texture;
+        const towerTexture = spritesheet.textures['tower.png'] as Texture;
 
         // Organize visuals by layer
 
@@ -108,6 +111,8 @@ loader
         stage.addChild(enemyLayer);
 
         const spriteLayer = new Container();
+        // spriteLayer.x = 0.5;
+        // spriteLayer.y = 0.5;
         stage.addChild(spriteLayer);
 
         const rangeLayer = new Container();
@@ -138,29 +143,6 @@ loader
         // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-explicit-any
         (window as any).render_mob_position = render_mob_position;
 
-        const towers = new Map<number, [Sprite, Sprite]>();
-
-        function create_tower(id: number, row: number, col: number) {
-            const border = Sprite.from(Texture.WHITE);
-            border.tint = 0x000000;
-            border.width = TILE_SIZE + 1;
-            border.height = TILE_SIZE + 1;
-            border.x = col * TILE_SIZE;
-            border.y = row * TILE_SIZE;
-            towerLayer.addChild(border);
-
-            const background = Sprite.from(Texture.WHITE);
-            background.tint = 0xF8F8F8;
-            background.width = TILE_SIZE - 1;
-            background.height = TILE_SIZE - 1;
-            background.x = col * TILE_SIZE + 1;
-            background.y = row * TILE_SIZE + 1;
-            towerLayer.addChild(background);
-
-            towers.set(id, [border, background]);
-        }
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-explicit-any
-        (window as any).create_tower = create_tower;
 
         type SmokeTrail = [SimpleRope, Point[]]
         const smokeTrails = new Map<number, SmokeTrail>();
@@ -318,6 +300,9 @@ loader
                     const sprite = sprites[i];
                     sprite.visible = true;
                     switch (spriteIds[i]) {
+                        // We can't use SpriteType.Swallow here beause it isn't
+                        // a const enum in the .d.ts file.
+                        // see https://github.com/rustwasm/wasm-bindgen/issues/2398
                         case 0:
                             sprite.texture = swallowTexture;
                             sprite.width = 0.8 * TILE_SIZE;
@@ -348,11 +333,23 @@ loader
                             sprite.height = 0.5 * TILE_SIZE;
                             sprite.anchor.set(0.5, 1.0);
                             break;
-                        case 5:
+                        case 5: // missile tower cover
                             sprite.texture = whiteTexture;
                             sprite.width = 10;
                             sprite.height = 10;
                             sprite.anchor.set(0.5, 0.5);
+                            break;
+                        case 6: // tower border
+                            sprite.texture = towerTexture;
+                            sprite.width = TILE_SIZE + 1;
+                            sprite.height = TILE_SIZE + 1;
+                            sprite.anchor.set(0.5, 0.5);
+                            break;
+                        case 7: // tower fill
+                            sprite.texture = whiteTexture;
+                            sprite.width = TILE_SIZE - 1;
+                            sprite.height = TILE_SIZE - 1;
+                            sprite.anchor.set(0, 0);
                             break;
                     }
                     sprite.x = spriteXs[i];
@@ -383,7 +380,7 @@ loader
                 lastUpdateTime = time;
                 lag += elapsed;
 
-                if (lag > MS_PER_UPDATE * MAX_UPDATES_PER_TICK) {
+                if (isPaused || lag > MS_PER_UPDATE * MAX_UPDATES_PER_TICK) {
                     // Too much lag, just pretend it doesn't exist
                     lag = 0;
                     // world.render(0); no point in rendering here?
@@ -395,11 +392,13 @@ loader
                     world.hover_map(0, mouseHoverPos.row, mouseHoverPos.col);
                 }
 
+                const msPerUpdate = MS_PER_UPDATE / gameSpeed();
+
                 let updates = 0;
-                while (lag >= MS_PER_UPDATE) {
+                while (lag >= msPerUpdate) {
                     world.update();
                     updates += 1;
-                    lag -= MS_PER_UPDATE;
+                    lag -= msPerUpdate;
                     if (updates > MAX_UPDATES_PER_TICK) {
                         world.render(1);
                         return;
@@ -408,7 +407,6 @@ loader
 
                 filter.uniforms.customUniform += 0.02;
                 filter.uniforms.customUniform %= 3.0;
-                // s.rotation += 0.02;
 
                 world.render(lag / MS_PER_UPDATE);
                 render(lag / MS_PER_UPDATE);

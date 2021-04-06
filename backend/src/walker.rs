@@ -1,6 +1,6 @@
 use crate::{
     distance::fast_distance,
-    graphics::{SpriteData, WALKER_ID},
+    graphics::{SpriteData, SpriteType},
     map::{true_row_col, Constants, Tile, TRUE_MAP_WIDTH},
     mob::Mob,
     world::{Map, World},
@@ -17,7 +17,7 @@ impl Walker {
     pub fn dump(&self, id: &u32, data: &mut SpriteData, mobs: &Map<u32, Mob>, frame_fudge: f32) {
         if let Some(mob) = mobs.get(id) {
             data.push(
-                WALKER_ID,
+                SpriteType::Walker as u8,
                 mob.x + frame_fudge * (mob.x - mob.old_x),
                 mob.y + frame_fudge * (mob.y - mob.old_y),
                 0.0,

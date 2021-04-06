@@ -7,6 +7,7 @@ mod graphics;
 mod map;
 mod missile;
 mod mob;
+mod pusillanimous;
 mod smoke;
 mod swallow;
 mod targeting;

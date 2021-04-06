@@ -8,10 +8,10 @@ use std::f32::consts::PI;
 use crate::{
     collision::circle_line_intersection,
     ease::ease_to_x_geometric,
-    graphics::{create_tower, SpriteData, SWALLOW_ID},
+    graphics::{SpriteData, SpriteType},
     map::{tile_center, Constants},
     mob::Mob,
-    targeting::{find_target, Targeting},
+    targeting::{find_target, Targeting, Threat},
     tower::{Range, Tower},
     walker::STANDARD_ENEMY_RADIUS,
     world::{EntityIds, Map, World},
@@ -80,18 +80,10 @@ impl Swallow {
         }
     }
 
-    // pub fn render(&self, id: u32, frame_fudge: f32, world: &World) {
-    //     if let Some(mob) = world.mobs.get(&id) {
-    //         let x = mob.x + frame_fudge * (mob.x - mob.old_x);
-    //         let y = mob.y + frame_fudge * (mob.y - mob.old_y);
-    //         render_swallow(id, x, y, self.rotation, 0.0);
-    //     }
-    // }
-
     pub fn dump(&self, id: &u32, data: &mut SpriteData, mobs: &Map<u32, Mob>, frame_fudge: f32) {
         if let Some(mob) = mobs.get(id) {
             data.push(
-                SWALLOW_ID,
+                SpriteType::Swallow as u8,
                 mob.x + frame_fudge * (mob.x - mob.old_x),
                 mob.y + frame_fudge * (mob.y - mob.old_y),
                 self.rotation,
@@ -105,7 +97,7 @@ impl Swallow {
 impl SwallowAfterImage {
     pub fn dump(&self, data: &mut SpriteData, frame_fudge: f32) {
         data.push(
-            SWALLOW_ID,
+            SpriteType::Swallow as u8,
             self.x,
             self.y,
             self.rotation,
@@ -113,16 +105,23 @@ impl SwallowAfterImage {
             0x000000,
         );
     }
+}
 
-    // pub fn render(&self, id: u32, frame_fudge: f32) {
-    //     render_swallow(
-    //         id,
-    //         self.x,
-    //         self.y,
-    //         self.rotation,
-    //         0.8 + 0.2 * (self.age as f32 + frame_fudge) / AFTER_IMAGE_DURATION as f32,
-    //     );
-    // }
+impl SwallowTargeter {
+    pub fn dump(&self, id: &u32, data: &mut SpriteData, towers: &Map<u32, Tower>) {
+        if let Some(tower) = towers.get(id) {
+            let (tower_x, tower_y) = tile_center(tower.row, tower.col);
+
+            data.push(
+                SpriteType::TowerBase as u8,
+                tower_x,
+                tower_y,
+                0.0,
+                1.0,
+                0xd4e8ee,
+            );
+        }
+    }
 }
 
 pub fn create_swallow_tower(
@@ -130,6 +129,7 @@ pub fn create_swallow_tower(
     row: usize,
     col: usize,
     towers: &mut Map<u32, Tower>,
+    swallow_targeters: &mut Map<u32, SwallowTargeter>,
     swallows: &mut Map<u32, Swallow>,
     mobs: &mut Map<u32, Mob>,
 ) {
@@ -146,10 +146,17 @@ pub fn create_swallow_tower(
             range: Range::Circle { radius: RANGE },
         },
     );
+    swallow_targeters.insert(
+        tower_entity,
+        SwallowTargeter {
+            closest_distance_squared: f32::INFINITY,
+            closest_x: 0.0,
+            closest_y: 0.0,
+        },
+    );
+
     swallows.insert(swallow_entity, Swallow::new(-PI / 2.0, x, y, tower_entity));
     mobs.insert(swallow_entity, Mob::new(x, y));
-
-    create_tower(tower_entity, row, col);
 }
 
 fn create_swallow_after_image(
@@ -235,6 +242,9 @@ impl World {
                                     impulse.dx += 0.5 * swallow.rotation.cos();
                                     impulse.dy += 0.5 * swallow.rotation.sin();
                                 }
+
+                                // Alert the target
+                                self.threats.insert(target, Threat {});
 
                                 // Point the swallow back towards its tower.
                                 if let Some(tower) = self.towers.get(&swallow.curr_tower) {
@@ -338,23 +348,6 @@ impl World {
                             let dy = y - swallow_mob.y;
                             let distance_squared = dx * dx + dy * dy;
 
-                            // // Check for collision with the tower.
-                            // // We count a collision as a locally minimal
-                            // // distance within a tile. That way we can be
-                            // // generous with the collision area while still
-                            // // being relatively precise with the visual
-                            // // moment of collision.
-
-                            // if distance_squared < f32::TILE_SIZE * f32::TILE_SIZE / 4.0
-                            //     && distance_squared > dist_from_tower_squared
-                            // {
-                            //     if let Some(swallow_mob) = self.mobs.get_mut(&entity) {
-                            //         swallow_mob.x = x;
-                            //         swallow_mob.y = y;
-                            //     }
-                            //     swallow.target = Target::None;
-                            //     continue;
-                            // }
                             swallow.target = Target::Tower {
                                 dist_from_tower_squared: distance_squared,
                             };

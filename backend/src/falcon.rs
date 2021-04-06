@@ -1,10 +1,10 @@
 use std::f32::consts::PI;
 
 use crate::{
-    graphics::{create_tower, SpriteData, FALCON_ID, INDICATOR_ID},
+    graphics::{SpriteData, SpriteType},
     map::{tile_center, true_row_col, Constants},
     mob::Mob,
-    targeting::{find_target, Targeting},
+    targeting::{find_target, Targeting, Threat},
     tower::{Range, Tower},
     walker::walk_tile,
     world::{EntityIds, Map, World},
@@ -65,7 +65,7 @@ impl Falcon {
         if let Some(mob) = mobs.get(id) {
             let height = self.height + frame_fudge * (self.height - self.old_height);
             data.push(
-                FALCON_ID,
+                SpriteType::Falcon as u8,
                 mob.x + frame_fudge * (mob.x - mob.old_x),
                 mob.y + frame_fudge * (mob.y - mob.old_y) - height,
                 self.rotation(),
@@ -88,7 +88,7 @@ impl TargetIndicator {
         }
         if let Some(mob) = mobs.get(id) {
             data.push(
-                INDICATOR_ID,
+                SpriteType::Indicator as u8,
                 mob.x + frame_fudge * (mob.x - mob.old_x),
                 mob.y + frame_fudge * (mob.y - mob.old_y) - 0.5 * f32::TILE_SIZE,
                 0.0,
@@ -122,8 +122,6 @@ pub fn create_falcon_tower(
     );
     falcons.insert(falcon_entity, Falcon::new_rising(tower_entity));
     mobs.insert(falcon_entity, Mob::new(x, y));
-
-    create_tower(tower_entity, row, col);
 }
 
 impl World {
@@ -143,6 +141,12 @@ impl World {
                     let old_height = falcon.height;
                     falcon.height -= falcon.speed;
                     falcon.old_height = old_height;
+                    if falcon.height < 0.75 * MAX_HEIGHT {
+                        // Alert the target
+                        if let Some(target) = falcon.target {
+                            self.threats.insert(target, Threat {});
+                        }
+                    }
                     if falcon.height <= 0.0 {
                         if let Some(target) = falcon.target {
                             // Unmark the target
@@ -176,6 +180,7 @@ impl World {
                             falcon.height += falcon.speed;
                             falcon.speed += RISING_ACCEL;
                             if falcon.height >= SOAR_HEIGHT {
+                                // Start diving
                                 falcon.state = FalconState::Diving;
                                 falcon.height = MAX_HEIGHT;
                                 // falcon.speed += EXTRA_DIVE_SPEED;
