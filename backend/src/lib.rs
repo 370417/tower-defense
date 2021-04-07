@@ -9,6 +9,7 @@ mod missile;
 mod mob;
 mod pusillanimous;
 mod smoke;
+mod spatial_index;
 mod swallow;
 mod targeting;
 mod tower;

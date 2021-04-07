@@ -2,7 +2,7 @@
 <html>
 
 <head>
-    <title>Nostalgia td</title>
+    <title>Box TD</title>
     <meta charset="utf8" />
     <link rel="icon"
         href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><style>@media(prefers-color-scheme:dark){text{fill:%23fff}}</style><text y=%22.9em%22 font-size=%22100%22>❦</text></svg>">
@@ -187,7 +187,7 @@
         }
 
         .tower-stats em {
-            opacity: 0.5;
+            /* opacity: 0.5; */
             font-family: Georgia, serif;
         }
 
@@ -245,10 +245,27 @@
 
         #wave-info .square {
             background-size: 40%;
+            position: relative;
+            overflow: visible;
+            font-size: 1px;
         }
 
         #wave-info .square:hover {
             background-color: #E0E0E0;
+        }
+
+        #wave-info .square:hover::after {
+            background-color: #000D;
+            position: absolute;
+            top: 36px;
+            left: 50%;
+            height: 24px;
+            line-height: 24px;
+            display: inline-block;
+            color: #FFF;
+            font-size: 1rem;
+            padding: 0 12px;
+            transform: translateX(-50%);
         }
 
         .square.play,
@@ -260,20 +277,40 @@
             background-image: url(icons/step-backward-solid.svg);
         }
 
+        .back::after {
+            content: 'Undo';
+        }
+
         .pause {
             background-image: url(icons/pause-solid.svg);
+        }
+
+        .pause::after {
+            content: 'Pause';
         }
 
         .play {
             background-image: url(icons/play-solid.svg);
         }
 
+        .play::after {
+            content: 'Play';
+        }
+
         .speed {
             background-image: url(icons/forward-solid.svg);
         }
 
+        .speed::after {
+            content: 'Fast Forward';
+        }
+
         .next {
             background-image: url(icons/step-forward-solid.svg);
+        }
+
+        .next::after {
+            content: 'Send Next Wave';
         }
     </style>
 </head>
@@ -298,14 +335,14 @@
                     <div class="bar" data-val="25%"><span>Damage</span><span>5</span>
                         <div class="barline" style="width: 25%;"></div>
                     </div>
-                    <div class="bar" data-val="85%"><span>Rate of fire</span><span>2+</span>
+                    <div class="bar" data-val="85%"><span>Unladen airspeed</span><span>9.75</span>
                         <div class="barline" style="width: 85%;"></div>
                     </div>
                     <div class="bar" data-val="15%"><span>Range</span><span>2.6</span>
                         <div class="barline" style="width: 15%;"></div>
                     </div>
                     <p>
-                        Has fast but weak attacks.
+                        Attacks faster as enemies get closer.
                     </p>
                     <em>Unladen airspeed: 9.75 tiles per second.</em>
                 </div>

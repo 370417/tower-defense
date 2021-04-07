@@ -162,6 +162,10 @@ impl World {
                                 let (x, y) = tile_center(tower.row, tower.col);
                                 falcon_mob.x = x;
                                 falcon_mob.y = y;
+                                // setting old_x/old_y avoids visual teleporting if we render
+                                // in between frames
+                                falcon_mob.old_x = x;
+                                falcon_mob.old_y = y;
                             }
                         }
                         falcon.height = 0.0;

@@ -1,6 +1,12 @@
-use crate::world::World;
+use float_ord::FloatOrd;
+
+use crate::{
+    walker::Walker,
+    world::{Map, World},
+};
 
 /// A movalbe object.
+#[derive(Clone)]
 pub struct Mob {
     pub x: f32,
     pub y: f32,
@@ -27,4 +33,23 @@ impl World {
             mob.old_y = mob.y;
         }
     }
+}
+
+pub fn closest_walker<'a>(
+    walkers: &'a Map<u32, Walker>,
+    mobs: &'a Map<u32, Mob>,
+    x: f32,
+    y: f32,
+) -> Option<(&'a u32, &'a Mob, f32)> {
+    // This is one of the places where we would use the spatial index
+    // when numbers get large
+    walkers
+        .iter()
+        .filter_map(|(entity, _)| mobs.get(entity).and_then(|mob| Some((entity, mob))))
+        .map(|(entity, mob)| {
+            let dx = mob.x - x;
+            let dy = mob.y - y;
+            (entity, mob, dx * dx + dy * dy)
+        })
+        .min_by_key(|(_, _, distance_squared)| FloatOrd(*distance_squared))
 }

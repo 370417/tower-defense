@@ -1,6 +1,9 @@
 //! Missiles and missile towers.
 
-use std::f32::{consts::PI, INFINITY};
+use std::f32::{
+    consts::{PI, TAU},
+    INFINITY,
+};
 
 use crate::{
     ease::ease_to_x_geometric,
@@ -23,7 +26,7 @@ const ROTATION_ACCEL: f32 = 0.05;
 const TOWER_MAX_TURN_SPEED: f32 = 0.05;
 const TOWER_ROTATION_ACCEL: f32 = 0.0025;
 
-const SLOW_TURN_DURATION: u32 = 300;
+const SLOW_TURN_DURATION: u32 = 200;
 
 pub const MISSILE_WIDTH: f32 = 5.0;
 pub const MISSILE_LENGTH: f32 = 10.0;
@@ -129,15 +132,25 @@ impl World {
                     some => some,
                 };
 
-                let goal_rotation = match target_else_closest_mob {
-                    Some((_, x, y)) => f32::atan2(y - tower_y, x - tower_x),
-                    None => spawner.rotation,
+                let (target_rotation, target_d_rotation) = match target_else_closest_mob {
+                    Some((entity, x, y)) => {
+                        if let Some(mob) = self.mobs.get(&entity) {
+                            (
+                                f32::atan2(y - tower_y, x - tower_x),
+                                calc_target_sweep_angle(tower_x, tower_y, mob),
+                            )
+                        } else {
+                            (spawner.rotation + 0.5 * spawner.rotation_speed, 0.0)
+                        }
+                    }
+                    None => (spawner.rotation + 0.5 * spawner.rotation_speed, 0.0),
                 };
 
                 ease_to_x_geometric(
                     &mut spawner.rotation,
                     &mut spawner.rotation_speed,
-                    goal_rotation,
+                    target_rotation,
+                    target_d_rotation,
                     TOWER_MAX_TURN_SPEED,
                     TOWER_ROTATION_ACCEL,
                     crate::ease::Domain::Radian { miss_adjust: 1.0 },
@@ -194,9 +207,7 @@ impl World {
         for (&entity, missile) in &mut self.missiles {
             missile.age += 1;
             if let Some(target_mob) = self.mobs.get(&missile.target) {
-                // Copy target's coordinates to satisfy borrow checker
-                let target_x = target_mob.x;
-                let target_y = target_mob.y;
+                let target_mob = target_mob.clone();
 
                 if let Some(missile_mob) = self.mobs.get_mut(&entity) {
                     // Check for collision
@@ -207,8 +218,9 @@ impl World {
                         missile_mob.x + MISSILE_LENGTH * 0.5 * missile.rotation.cos();
                     let missile_tip_y =
                         missile_mob.y + MISSILE_LENGTH * 0.5 * missile.rotation.sin();
-                    let distance_squared = (target_x - missile_tip_x) * (target_x - missile_tip_x)
-                        + (target_y - missile_tip_y) * (target_y - missile_tip_y);
+                    let distance_squared = (target_mob.x - missile_tip_x)
+                        * (target_mob.x - missile_tip_x)
+                        + (target_mob.y - missile_tip_y) * (target_mob.y - missile_tip_y);
                     if distance_squared < (target_radius * target_radius) as f32 {
                         spawn_explosion(
                             self.entity_ids.next(),
@@ -225,22 +237,24 @@ impl World {
                     }
 
                     // Aim toward the target
-                    let rotation = f32::atan2(target_y - missile_mob.y, target_x - missile_mob.x);
+                    let rotation =
+                        f32::atan2(target_mob.y - missile_mob.y, target_mob.x - missile_mob.x);
 
-                    // Rotation is slower when the missile is young
-                    let rotation_accel = if missile.age >= SLOW_TURN_DURATION {
-                        missile.rotation_acceleration
+                    // Max turn speed is slower when the missile is young
+                    let max_turn_speed = if missile.age >= SLOW_TURN_DURATION {
+                        missile.max_turn_speed
                     } else {
-                        missile.rotation_acceleration
-                            * (0.2 + 0.8 * missile.age as f32 / SLOW_TURN_DURATION as f32)
+                        missile.max_turn_speed
+                            * (0.5 + 0.5 * missile.age as f32 / SLOW_TURN_DURATION as f32)
                     };
 
                     ease_to_x_geometric(
                         &mut missile.rotation,
                         &mut missile.rotation_speed,
                         rotation,
-                        missile.max_turn_speed,
-                        rotation_accel,
+                        0.0, // trying to use calc_sweep_angle here makes the missile miss more often
+                        max_turn_speed,
+                        missile.rotation_acceleration,
                         crate::ease::Domain::Radian { miss_adjust: 0.95 },
                     );
 
@@ -338,5 +352,18 @@ impl MissileSpawner {
                 0x000000,
             )
         }
+    }
+}
+
+fn calc_target_sweep_angle(self_x: f32, self_y: f32, target_mob: &Mob) -> f32 {
+    let old_angle = f32::atan2(target_mob.old_y - self_y, target_mob.old_x - self_x);
+    let new_angle = f32::atan2(target_mob.y - self_y, target_mob.x - self_x);
+    let d_angle = new_angle - old_angle;
+    if d_angle > PI {
+        d_angle - TAU
+    } else if d_angle < -PI {
+        d_angle + TAU
+    } else {
+        d_angle
     }
 }

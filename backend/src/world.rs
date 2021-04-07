@@ -207,6 +207,7 @@ impl World {
         self.update_pusillanimity();
         self.walk();
         self.fly_missiles();
+        self.swallow_tower_targeting();
         self.fly_swallows();
         self.fade_swallow_after_images();
         self.fly_falcons();

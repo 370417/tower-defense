@@ -15,6 +15,7 @@ pub fn ease_to_x_geometric(
     x: &mut f32,
     dx: &mut f32,
     target_x: f32,
+    target_dx: f32,
     max_dx: f32,
     ddx: f32,
     domain: Domain,
@@ -27,8 +28,12 @@ pub fn ease_to_x_geometric(
     let brake_distance = *dx / (1.0 - r);
     let x_at_rest = *x + brake_distance;
 
+    // Where will the target come to rest?
+    let target_brake_distance = target_dx / (1.0 - r);
+    let target_x_at_rest = target_x + target_brake_distance;
+
     // Accelerate so that x_at_rest becomes closer to target_x
-    let mut ideal_ddx = target_x - x_at_rest;
+    let mut ideal_ddx = target_x_at_rest - x_at_rest;
 
     // Keep angles small
     if let Domain::Radian { miss_adjust } = domain {

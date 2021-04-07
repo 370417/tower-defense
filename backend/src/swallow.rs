@@ -10,7 +10,7 @@ use crate::{
     ease::ease_to_x_geometric,
     graphics::{SpriteData, SpriteType},
     map::{tile_center, Constants},
-    mob::Mob,
+    mob::{closest_walker, Mob},
     targeting::{find_target, Targeting, Threat},
     tower::{Range, Tower},
     walker::STANDARD_ENEMY_RADIUS,
@@ -59,7 +59,12 @@ pub struct SwallowTargeter {
 
 pub enum Target {
     Enemy(u32),
-    Tower { dist_from_tower_squared: f32 },
+    /// Store distance so that we know when we have reached a local minimum.
+    /// The usual technique of having a threshold for distance collision isn't
+    /// reliable in this situation without making it unreasonably large.
+    Tower {
+        dist_from_tower_squared: f32,
+    },
     None,
 }
 
@@ -182,17 +187,34 @@ impl World {
             if let Some(swallow_mob) = self.mobs.get(&entity) {
                 match swallow.target {
                     Target::None => {
-                        // once we implement migration, we'll want to check
-                        // first if we should return home
-
                         swallow.after_image_countdown =
                             swallow.after_image_countdown.saturating_sub(1);
 
-                        if let Some(tower) = self.towers.get(&swallow.curr_tower) {
+                        if let Some(home_tower) = self.towers.get(&swallow.home_tower) {
+                            // Check first if we should return home
+
+                            if swallow.curr_tower != swallow.home_tower {
+                                let home_targeter = self.swallow_targeters.get(&swallow.home_tower);
+                                if let Some(targeter) = home_targeter {
+                                    match home_tower.range {
+                                        Range::Circle { radius } => {
+                                            if targeter.closest_distance_squared <= radius * radius
+                                            {
+                                                swallow.target = Target::Tower {
+                                                    dist_from_tower_squared: 5.0,
+                                                };
+                                                swallow.curr_tower = swallow.home_tower;
+                                                continue;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
                             if let Some((target, target_x, target_y)) = find_target(
                                 swallow_mob.x,
                                 swallow_mob.y,
-                                tower.range,
+                                home_tower.range, // we will want to use home tower instead
                                 Targeting::Close,
                                 &self.walkers,
                                 &self.mobs,
@@ -205,6 +227,56 @@ impl World {
                                     f32::atan2(target_y - swallow_mob.y, target_x - swallow_mob.x);
                                 swallow.vanishing_x = swallow_mob.x;
                                 swallow.vanishing_y = swallow_mob.y;
+                                continue;
+                            }
+
+                            // If we have nothing else to do, look for a different tower to help out
+                            // We can't use min_by_key and closures because
+                            // the borrow checker doesn't understand our dreams :( (it won't split the
+                            // self borrow by field when using a closure)
+
+                            // But first, go home if possible, even if the home
+                            // tower isn't active. That makes migration slightly
+                            // less op.
+                            if swallow.curr_tower != swallow.home_tower {
+                                swallow.target = Target::Tower {
+                                    dist_from_tower_squared: f32::INFINITY,
+                                };
+                                swallow.curr_tower = swallow.home_tower;
+                                continue;
+                            }
+
+                            let mut closest_active_tower = None;
+                            let mut min_distance_squared = f32::INFINITY;
+                            for (entity, targeter) in &self.swallow_targeters {
+                                // Don't migrate to the current tower
+                                if swallow.curr_tower == *entity {
+                                    continue;
+                                }
+                                match home_tower.range {
+                                    Range::Circle { radius } => {
+                                        // If tower is active
+                                        if targeter.closest_distance_squared < radius * radius {
+                                            if let Some(tower) = self.towers.get(entity) {
+                                                let (tower_x, tower_y) =
+                                                    tile_center(tower.row, tower.col);
+                                                let dx = tower_x - swallow_mob.x;
+                                                let dy = tower_y - swallow_mob.y;
+                                                let distance_squared = dx * dx + dy * dy;
+                                                if distance_squared < min_distance_squared {
+                                                    min_distance_squared = distance_squared;
+                                                    closest_active_tower = Some(entity);
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            if let Some(target_tower) = closest_active_tower {
+                                swallow.target = Target::Tower {
+                                    dist_from_tower_squared: min_distance_squared,
+                                };
+                                swallow.curr_tower = *target_tower;
                             }
                         }
                     }
@@ -312,6 +384,7 @@ impl World {
                                 &mut swallow.rotation,
                                 &mut swallow.rotation_speed,
                                 rotation,
+                                0.0,
                                 swallow.max_turn_speed,
                                 swallow.rotation_accel,
                                 crate::ease::Domain::Radian { miss_adjust: 0.9 },
@@ -356,6 +429,7 @@ impl World {
                                 &mut swallow.rotation,
                                 &mut swallow.rotation_speed,
                                 f32::atan2(dy, dx),
+                                0.0,
                                 swallow.max_turn_speed,
                                 swallow.rotation_accel,
                                 crate::ease::Domain::Radian { miss_adjust: 0.9 },
@@ -404,6 +478,23 @@ impl World {
         }
         for entity in trash {
             self.swallow_after_images.remove(&entity);
+        }
+    }
+
+    pub fn swallow_tower_targeting(&mut self) {
+        for (entity, targeter) in &mut self.swallow_targeters {
+            if let Some(tower) = self.towers.get(entity) {
+                let (x, y) = tile_center(tower.row, tower.col);
+                if let Some((_mob_entity, closest_walker, distance_squared)) =
+                    closest_walker(&self.walkers, &self.mobs, x, y)
+                {
+                    targeter.closest_x = closest_walker.x;
+                    targeter.closest_y = closest_walker.y;
+                    targeter.closest_distance_squared = distance_squared;
+                } else {
+                    targeter.closest_distance_squared = f32::INFINITY;
+                }
+            }
         }
     }
 }
