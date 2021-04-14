@@ -2,7 +2,9 @@ export let isPaused = false;
 export let isSpedUp = false;
 
 export function gameSpeed(): number {
-    if (isSpedUp) {
+    if (isPaused) {
+        return 0;
+    } else if (isSpedUp) {
         return 3;
     } else {
         return 1;

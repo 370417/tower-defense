@@ -2,6 +2,8 @@
 
 use std::{collections::VecDeque, f32::consts::TAU};
 
+use serde::{Deserialize, Serialize};
+
 use crate::{
     distance::fast_distance,
     graphics::{create_smoke_trail, recycle_smoke_trail, render_smoke_trail},
@@ -12,6 +14,7 @@ use crate::{
 pub const SMOKE_TRAIL_LEN: usize = 24;
 const SMOKE_WIDTH: f32 = 2.0;
 
+#[derive(Serialize, Deserialize)]
 pub struct SmokeTrail {
     parent: u32,
     parent_is_valid: bool,
@@ -32,6 +35,7 @@ pub struct SmokeTrail {
 /// SmokeTrailRenderer stores these individual differences without duplicating
 /// shared SmokeTrail data. It also stores x and y coordinate information for
 /// the renderer so that it doesn't get dropped.
+#[derive(Serialize, Deserialize)]
 pub struct SmokeTrailRenderer {
     // Each renderer has a unique id so that it can be rendered. This id
     // isn't really an entity though, since renderers are stored in smoke
@@ -43,6 +47,7 @@ pub struct SmokeTrailRenderer {
     frequency: f32,
 }
 
+#[derive(Serialize, Deserialize)]
 struct SmokeParticle {
     birth_tick: u32,
     x: f32,
@@ -142,12 +147,12 @@ impl SmokeTrail {
 impl World {
     pub fn update_smoke(&mut self) {
         let mut trash = Vec::new();
-        for (entity, smoke_trail) in &mut self.smoke_trails {
-            let parent_mob = self.mobs.get(&smoke_trail.parent);
-            let parent_missile = self.missiles.get(&smoke_trail.parent);
+        for (entity, smoke_trail) in &mut self.core_state.smoke_trails {
+            let parent_mob = self.core_state.mobs.get(&smoke_trail.parent);
+            let parent_missile = self.core_state.missiles.get(&smoke_trail.parent);
             if let (Some(mob), Some(missile)) = (parent_mob, parent_missile) {
                 smoke_trail.particles.push_back(SmokeParticle {
-                    birth_tick: self.tick,
+                    birth_tick: self.core_state.tick,
                     x: mob.x - 5.0 * missile.rotation.cos(),
                     y: mob.y - 5.0 * missile.rotation.sin(),
                     normal_x: -missile.rotation.sin(),
@@ -178,7 +183,7 @@ impl World {
             }
         }
         for entity in trash {
-            self.smoke_trails.remove(&entity);
+            self.core_state.smoke_trails.remove(&entity);
         }
     }
 }

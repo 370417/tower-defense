@@ -1,3 +1,5 @@
+use serde::{Deserialize, Serialize};
+
 use crate::{
     distance::fast_distance,
     graphics::{SpriteData, SpriteType},
@@ -9,6 +11,7 @@ use crate::{
 pub const STANDARD_ENEMY_RADIUS: f32 = 0.3 * f32::TILE_SIZE;
 
 /// A walker is an entity that travels along the map's path.
+#[derive(Serialize, Deserialize)]
 pub struct Walker {
     pub speed: f32,
 }
@@ -30,19 +33,26 @@ impl Walker {
 
 impl World {
     pub fn walk(&mut self) {
-        for (entity, walker) in &mut self.walkers {
-            if let Some(mob) = self.mobs.get_mut(entity) {
+        for (entity, walker) in &mut self.core_state.walkers {
+            if let Some(mob) = self.core_state.mobs.get_mut(entity) {
                 let (true_row, true_col) = true_row_col(mob.x, mob.y);
 
                 let mut speed = walker.speed;
 
                 // Walk slower if under the effects of an external impulse
-                if let Some(impulse) = self.impulses.get(entity) {
+                if let Some(impulse) = self.core_state.impulses.get(entity) {
                     let magnitude = fast_distance(impulse.dx, impulse.dy);
                     speed *= 1.0 / (1.0 + 0.0 * magnitude);
                 }
 
-                walk_tile(&self.map, true_row, true_col, &mut mob.x, &mut mob.y, speed);
+                walk_tile(
+                    &self.level_state.map,
+                    true_row,
+                    true_col,
+                    &mut mob.x,
+                    &mut mob.y,
+                    speed,
+                );
             }
         }
     }

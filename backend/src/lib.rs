@@ -1,7 +1,9 @@
+mod build;
 mod collision;
 mod distance;
 mod ease;
 mod explosion;
+mod factory;
 mod falcon;
 mod graphics;
 mod map;

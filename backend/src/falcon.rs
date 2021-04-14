@@ -1,21 +1,24 @@
-use std::f32::consts::PI;
+use std::{collections::VecDeque, f32::consts::PI};
+
+use serde::{Deserialize, Serialize};
 
 use crate::{
+    build::BuildOrder,
     graphics::{SpriteData, SpriteType},
     map::{tile_center, true_row_col, Constants},
     mob::Mob,
     targeting::{find_target, Targeting, Threat},
-    tower::{Range, Tower},
+    tower::{create_tower, Tower, FALCON_INDEX},
     walker::walk_tile,
     world::{EntityIds, Map, World},
 };
 
 const RISING_ACCEL: f32 = 0.17;
 const MAX_HEIGHT: f32 = 5.0 * f32::TILE_SIZE;
-const RANGE: f32 = 5.0 * f32::TILE_SIZE;
 const COOLDOWN: u32 = 60;
 const SOAR_HEIGHT: f32 = MAX_HEIGHT + 100.0;
 
+#[derive(Serialize, Deserialize)]
 pub struct Falcon {
     pub speed: f32,
     pub accel: f32,
@@ -27,6 +30,7 @@ pub struct Falcon {
     pub curr_tower: u32,
 }
 
+#[derive(Serialize, Deserialize)]
 pub enum FalconState {
     Rising,
     Diving,
@@ -34,6 +38,7 @@ pub enum FalconState {
     Recovering { countdown: u32 },
 }
 
+#[derive(Serialize, Deserialize)]
 pub struct TargetIndicator {
     // Like a reference count but for falcons instead of pointers :)
     pub falcons: u32,
@@ -104,29 +109,33 @@ pub fn create_falcon_tower(
     row: usize,
     col: usize,
     towers: &mut Map<u32, Tower>,
+    towers_by_pos: &mut Map<(usize, usize), u32>,
     falcons: &mut Map<u32, Falcon>,
     mobs: &mut Map<u32, Mob>,
+    build_orders: &mut VecDeque<BuildOrder>,
 ) {
     let tower_entity = entities.next();
     let falcon_entity = entities.next();
 
     let (x, y) = tile_center(row, col);
 
-    towers.insert(
+    create_tower(
+        row,
+        col,
         tower_entity,
-        Tower {
-            row,
-            col,
-            range: Range::Circle { radius: RANGE },
-        },
+        FALCON_INDEX,
+        towers,
+        towers_by_pos,
+        build_orders,
     );
+
     falcons.insert(falcon_entity, Falcon::new_rising(tower_entity));
     mobs.insert(falcon_entity, Mob::new(x, y));
 }
 
 impl World {
     pub fn fly_falcons(&mut self) {
-        for (entity, falcon) in &mut self.falcons {
+        for (entity, falcon) in &mut self.core_state.falcons {
             match falcon.state {
                 FalconState::Recovering { countdown } => {
                     falcon.state = if countdown == 0 {
@@ -144,21 +153,23 @@ impl World {
                     if falcon.height < 0.75 * MAX_HEIGHT {
                         // Alert the target
                         if let Some(target) = falcon.target {
-                            self.threats.insert(target, Threat {});
+                            self.core_state.threats.insert(target, Threat {});
                         }
                     }
                     if falcon.height <= 0.0 {
                         if let Some(target) = falcon.target {
                             // Unmark the target
-                            if let Some(indicator) = self.target_indicators.get_mut(&target) {
+                            if let Some(indicator) =
+                                self.core_state.target_indicators.get_mut(&target)
+                            {
                                 indicator.falcons = indicator.falcons.saturating_sub(1);
                             }
 
                             // Check to see if we have hit the target
                         }
 
-                        if let Some(tower) = self.towers.get(&falcon.curr_tower) {
-                            if let Some(falcon_mob) = self.mobs.get_mut(entity) {
+                        if let Some(tower) = self.core_state.towers.get(&falcon.curr_tower) {
+                            if let Some(falcon_mob) = self.core_state.mobs.get_mut(entity) {
                                 let (x, y) = tile_center(tower.row, tower.col);
                                 falcon_mob.x = x;
                                 falcon_mob.y = y;
@@ -192,17 +203,22 @@ impl World {
                                 falcon.accel = 0.0;
 
                                 // Predict where the target will be at time of impact
-                                if let Some(target_mob) = self.mobs.get(&target) {
+                                if let Some(target_mob) = self.core_state.mobs.get(&target) {
                                     let dive_time = (falcon.height / falcon.speed).ceil();
 
                                     let mut x = target_mob.x;
                                     let mut y = target_mob.y;
                                     let (true_row, true_col) = true_row_col(x, y);
                                     walk_tile(
-                                        &self.map, true_row, true_col, &mut x, &mut y, dive_time,
+                                        &self.level_state.map,
+                                        true_row,
+                                        true_col,
+                                        &mut x,
+                                        &mut y,
+                                        dive_time,
                                     );
 
-                                    if let Some(falcon_mob) = self.mobs.get_mut(entity) {
+                                    if let Some(falcon_mob) = self.core_state.mobs.get_mut(entity) {
                                         falcon_mob.x = x;
                                         falcon_mob.y = y;
                                     }
@@ -213,18 +229,16 @@ impl World {
                         }
                         None => {
                             // Look for a target
-                            if let Some(tower) = self.towers.get(&falcon.curr_tower) {
+                            if let Some(tower) = self.core_state.towers.get(&falcon.curr_tower) {
                                 let (tower_x, tower_y) = tile_center(tower.row, tower.col);
                                 if let Some((target, _x, _y)) = find_target(
                                     tower_x,
                                     tower_y,
                                     tower.range,
                                     Targeting::First,
-                                    &self.walkers,
-                                    &self.mobs,
-                                    &self.map,
-                                    &self.dist_from_entrance,
-                                    &self.dist_from_exit,
+                                    &self.core_state.walkers,
+                                    &self.core_state.mobs,
+                                    &self.level_state,
                                 ) {
                                     falcon.target = Some(target);
                                     falcon.speed = 0.0;
@@ -232,6 +246,7 @@ impl World {
 
                                     // Mark the target
                                     let indicator = self
+                                        .core_state
                                         .target_indicators
                                         .entry(target)
                                         .or_insert(TargetIndicator { falcons: 0 });

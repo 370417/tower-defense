@@ -2,7 +2,7 @@
 export const MS_PER_UPDATE = 1000 / 60;
 
 // Update at most 16 times per rendered frame
-export const MAX_UPDATES_PER_TICK = 7;
+export const MAX_UPDATES_PER_FRAME = 7;
 
 export const MAP_WIDTH = 22;
 export const MAP_HEIGHT = 18;

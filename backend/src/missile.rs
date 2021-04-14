@@ -1,19 +1,22 @@
 //! Missiles and missile towers.
 
-use std::f32::{
-    consts::{PI, TAU},
-    INFINITY,
+use std::{
+    collections::VecDeque,
+    f32::consts::{PI, TAU},
 };
 
+use serde::{Deserialize, Serialize};
+
 use crate::{
+    build::BuildOrder,
     ease::ease_to_x_geometric,
     explosion::spawn_explosion,
-    graphics::{SpriteData, SpriteType},
+    graphics::SpriteType,
     map::{tile_center, Constants},
     mob::Mob,
     smoke::spawn_smoke_trail,
     targeting::{find_target, Targeting, Threat, THREAT_DISTANCE},
-    tower::{Range, Tower},
+    tower::{create_tower, Tower, TowerStatus, BASE_TOWERS, MISSILE_INDEX},
     walker::STANDARD_ENEMY_RADIUS,
     world::{Map, World},
 };
@@ -23,14 +26,15 @@ const MAX_TURN_SPEED: f32 = 0.13;
 const ACCELERATION: f32 = 0.31;
 const ROTATION_ACCEL: f32 = 0.05;
 
-const TOWER_MAX_TURN_SPEED: f32 = 0.05;
-const TOWER_ROTATION_ACCEL: f32 = 0.0025;
+const TOWER_MAX_TURN_SPEED: f32 = 0.08;
+const TOWER_ROTATION_ACCEL: f32 = 0.002;
 
 const SLOW_TURN_DURATION: u32 = 200;
 
 pub const MISSILE_WIDTH: f32 = 5.0;
 pub const MISSILE_LENGTH: f32 = 10.0;
 
+#[derive(Serialize, Deserialize)]
 pub struct MissileSpawner {
     pub reload_cost: u32,
     pub rotation: f32,
@@ -39,6 +43,7 @@ pub struct MissileSpawner {
     right_reload_countdown: u32,
 }
 
+#[derive(Serialize, Deserialize)]
 pub struct Missile {
     pub target: u32,
     pub rotation: f32,
@@ -56,15 +61,18 @@ pub fn create_missile_tower(
     row: usize,
     col: usize,
     towers: &mut Map<u32, Tower>,
+    towers_by_pos: &mut Map<(usize, usize), u32>,
     spawners: &mut Map<u32, MissileSpawner>,
-) {
-    towers.insert(
+    build_orders: &mut VecDeque<BuildOrder>,
+) -> u32 {
+    create_tower(
+        row,
+        col,
         entity,
-        Tower {
-            row,
-            col,
-            range: Range::Circle { radius: 200.0 },
-        },
+        MISSILE_INDEX,
+        towers,
+        towers_by_pos,
+        build_orders,
     );
     spawners.insert(
         entity,
@@ -76,6 +84,7 @@ pub fn create_missile_tower(
             rotation_speed: 0.0,
         },
     );
+    entity
 }
 
 fn spawn_missile(
@@ -101,8 +110,12 @@ fn spawn_missile(
 
 impl World {
     pub fn operate_missile_towers(&mut self) {
-        for (entity, spawner) in &mut self.missile_spawners {
-            if let Some(tower) = self.towers.get(entity) {
+        for (entity, spawner) in &mut self.core_state.missile_spawners {
+            if let Some(tower) = self.core_state.towers.get(entity) {
+                if tower.status != TowerStatus::Operational {
+                    continue;
+                }
+
                 let (tower_x, tower_y) = tile_center(tower.row, tower.col);
 
                 let first_mob_in_range = find_target(
@@ -110,31 +123,27 @@ impl World {
                     tower_y,
                     tower.range,
                     Targeting::First,
-                    &self.walkers,
-                    &self.mobs,
-                    &self.map,
-                    &self.dist_from_entrance,
-                    &self.dist_from_exit,
+                    &self.core_state.walkers,
+                    &self.core_state.mobs,
+                    &self.level_state,
                 );
 
                 let target_else_closest_mob = match first_mob_in_range {
                     None => find_target(
                         tower_x,
                         tower_y,
-                        Range::Circle { radius: INFINITY },
+                        f32::INFINITY,
                         Targeting::Close,
-                        &self.walkers,
-                        &self.mobs,
-                        &self.map,
-                        &self.dist_from_entrance,
-                        &self.dist_from_exit,
+                        &self.core_state.walkers,
+                        &self.core_state.mobs,
+                        &self.level_state,
                     ),
                     some => some,
                 };
 
                 let (target_rotation, target_d_rotation) = match target_else_closest_mob {
                     Some((entity, x, y)) => {
-                        if let Some(mob) = self.mobs.get(&entity) {
+                        if let Some(mob) = self.core_state.mobs.get(&entity) {
                             (
                                 f32::atan2(y - tower_y, x - tower_x),
                                 calc_target_sweep_angle(tower_x, tower_y, mob),
@@ -160,17 +169,21 @@ impl World {
                     spawner.right_reload_countdown -= 1;
                 } else if spawner.left_reload_countdown <= 0 {
                     if let Some((target, _, _)) = first_mob_in_range {
-                        let entity = self.entity_ids.next();
+                        let entity = self.core_state.entity_ids.next();
                         spawn_missile(
                             entity,
                             target,
                             tower,
                             spawner.rotation,
                             1.0,
-                            &mut self.missiles,
-                            &mut self.mobs,
+                            &mut self.core_state.missiles,
+                            &mut self.core_state.mobs,
                         );
-                        spawn_smoke_trail(&mut self.entity_ids, &mut self.smoke_trails, entity);
+                        spawn_smoke_trail(
+                            &mut self.core_state.entity_ids,
+                            &mut self.core_state.smoke_trails,
+                            entity,
+                        );
                         spawner.right_reload_countdown = spawner.reload_cost;
                     }
                 }
@@ -179,17 +192,21 @@ impl World {
                     spawner.left_reload_countdown -= 1;
                 } else if spawner.right_reload_countdown <= 0 {
                     if let Some((target, _, _)) = first_mob_in_range {
-                        let entity = self.entity_ids.next();
+                        let entity = self.core_state.entity_ids.next();
                         spawn_missile(
                             entity,
                             target,
                             tower,
                             spawner.rotation,
                             -1.0,
-                            &mut self.missiles,
-                            &mut self.mobs,
+                            &mut self.core_state.missiles,
+                            &mut self.core_state.mobs,
                         );
-                        spawn_smoke_trail(&mut self.entity_ids, &mut self.smoke_trails, entity);
+                        spawn_smoke_trail(
+                            &mut self.core_state.entity_ids,
+                            &mut self.core_state.smoke_trails,
+                            entity,
+                        );
                         spawner.left_reload_countdown = spawner.reload_cost;
                     }
                 }
@@ -200,16 +217,14 @@ impl World {
     /// Missile behavior: (subject to change)
     /// Starts at a standstill and accelerates toward target.
     /// Max speed is simulated with simple air resistance.
-    /// Turn radius increases as speed increases, and the missile slows down
-    /// if it needs to turn a large amount.
     pub fn fly_missiles(&mut self) {
         let mut trash = Vec::new();
-        for (&entity, missile) in &mut self.missiles {
+        for (&entity, missile) in &mut self.core_state.missiles {
             missile.age += 1;
-            if let Some(target_mob) = self.mobs.get(&missile.target) {
+            if let Some(target_mob) = self.core_state.mobs.get(&missile.target) {
                 let target_mob = target_mob.clone();
 
-                if let Some(missile_mob) = self.mobs.get_mut(&entity) {
+                if let Some(missile_mob) = self.core_state.mobs.get_mut(&entity) {
                     // Check for collision
                     // The tip of a missile extends out in front of its
                     // x,y position.
@@ -223,8 +238,8 @@ impl World {
                         + (target_mob.y - missile_tip_y) * (target_mob.y - missile_tip_y);
                     if distance_squared < (target_radius * target_radius) as f32 {
                         spawn_explosion(
-                            self.entity_ids.next(),
-                            &mut self.explosions,
+                            self.core_state.entity_ids.next(),
+                            &mut self.core_state.explosions,
                             missile_tip_x,
                             missile_tip_y,
                             1.2 * f32::TILE_SIZE,
@@ -233,7 +248,7 @@ impl World {
                         continue;
                     } else if distance_squared < THREAT_DISTANCE * THREAT_DISTANCE {
                         // Add threat to mobs
-                        self.threats.insert(missile.target, Threat {});
+                        self.core_state.threats.insert(missile.target, Threat {});
                     }
 
                     // Aim toward the target
@@ -269,8 +284,83 @@ impl World {
             }
         }
         for entity in trash {
-            self.missiles.remove(&entity);
-            self.mobs.remove(&entity);
+            self.core_state.missiles.remove(&entity);
+            self.core_state.mobs.remove(&entity);
+        }
+    }
+
+    pub fn dump_missiles(&mut self, frame_fudge: f32) {
+        for (entity, missile) in &self.core_state.missiles {
+            if let Some(mob) = self.core_state.mobs.get(entity) {
+                self.render_state.sprite_data.push(
+                    SpriteType::Missile as u8,
+                    mob.x + frame_fudge * (mob.x - mob.old_x),
+                    mob.y + frame_fudge * (mob.y - mob.old_y),
+                    missile.rotation,
+                    1.0,
+                    0x000000,
+                );
+            }
+        }
+    }
+
+    pub fn dump_missile_towers(&mut self, frame_fudge: f32) {
+        for (entity, spawner) in &self.core_state.missile_spawners {
+            if let Some(tower) = self.core_state.towers.get(entity) {
+                let (tower_x, tower_y) = tile_center(tower.row, tower.col);
+
+                let rotation = spawner.rotation + spawner.rotation_speed * frame_fudge;
+
+                let cos = rotation.cos();
+                let sin = rotation.sin();
+
+                self.render_state.sprite_data.push(
+                    SpriteType::TowerBase as u8,
+                    tower_x,
+                    tower_y,
+                    0.0,
+                    1.0,
+                    BASE_TOWERS[MISSILE_INDEX].color,
+                );
+
+                let left_peek = 3.0
+                    * ease_peek(spawner.left_reload_countdown as f32 / spawner.reload_cost as f32);
+                let right_peek = 3.0
+                    * ease_peek(spawner.right_reload_countdown as f32 / spawner.reload_cost as f32);
+
+                let recoil_amount = 2.0
+                    * spawner
+                        .left_reload_countdown
+                        .max(spawner.right_reload_countdown) as f32
+                    / spawner.reload_cost as f32;
+
+                self.render_state.sprite_data.push(
+                    SpriteType::Missile as u8,
+                    tower_x + MISSILE_WIDTH * 0.5 * sin + (right_peek - recoil_amount) * cos,
+                    tower_y - MISSILE_WIDTH * 0.5 * cos + (right_peek - recoil_amount) * sin,
+                    rotation,
+                    1.0,
+                    0x000000,
+                );
+
+                self.render_state.sprite_data.push(
+                    SpriteType::Missile as u8,
+                    tower_x - MISSILE_WIDTH * 0.5 * sin + (left_peek - recoil_amount) * cos,
+                    tower_y + MISSILE_WIDTH * 0.5 * cos + (left_peek - recoil_amount) * sin,
+                    rotation,
+                    1.0,
+                    0x000000,
+                );
+
+                self.render_state.sprite_data.push(
+                    SpriteType::MissileTower as u8,
+                    tower_x - recoil_amount * cos,
+                    tower_y - recoil_amount * sin,
+                    rotation,
+                    1.0,
+                    BASE_TOWERS[MISSILE_INDEX].color,
+                );
+            }
         }
     }
 }
@@ -289,69 +379,15 @@ impl Missile {
             age: 0,
         }
     }
-
-    pub fn dump(&self, id: &u32, data: &mut SpriteData, mobs: &Map<u32, Mob>, frame_fudge: f32) {
-        if let Some(mob) = mobs.get(id) {
-            data.push(
-                SpriteType::Missile as u8,
-                mob.x + frame_fudge * (mob.x - mob.old_x),
-                mob.y + frame_fudge * (mob.y - mob.old_y),
-                self.rotation,
-                1.0,
-                0x000000,
-            );
-        }
-    }
 }
 
-impl MissileSpawner {
-    pub fn dump(&self, id: &u32, data: &mut SpriteData, towers: &Map<u32, Tower>) {
-        if let Some(tower) = towers.get(id) {
-            let (tower_x, tower_y) = tile_center(tower.row, tower.col);
-            let cos = self.rotation.cos();
-            let sin = self.rotation.sin();
-
-            data.push(
-                SpriteType::TowerBase as u8,
-                tower_x,
-                tower_y,
-                0.0,
-                1.0,
-                0xf5bec5,
-            );
-
-            let left_peek = 3.0 - 3.0 * self.left_reload_countdown as f32 / self.reload_cost as f32;
-            let right_peek =
-                3.0 - 3.0 * self.right_reload_countdown as f32 / self.reload_cost as f32;
-            let recoil_amount = (3.0 - left_peek.min(right_peek)) / 3.0;
-
-            data.push(
-                SpriteType::Missile as u8,
-                tower_x + MISSILE_WIDTH * 0.5 * sin + (right_peek - recoil_amount) * cos,
-                tower_y - MISSILE_WIDTH * 0.5 * cos + (right_peek - recoil_amount) * sin,
-                self.rotation,
-                1.0,
-                0x000000,
-            );
-
-            data.push(
-                SpriteType::Missile as u8,
-                tower_x - MISSILE_WIDTH * 0.5 * sin + (left_peek - recoil_amount) * cos,
-                tower_y + MISSILE_WIDTH * 0.5 * cos + (left_peek - recoil_amount) * sin,
-                self.rotation,
-                1.0,
-                0x000000,
-            );
-
-            data.push(
-                SpriteType::MissileTower as u8,
-                tower_x - recoil_amount * cos,
-                tower_y - recoil_amount * sin,
-                self.rotation,
-                1.0,
-                0x000000,
-            )
-        }
+fn ease_peek(t: f32) -> f32 {
+    if t > 0.8 {
+        0.0
+    } else if t < 0.2 {
+        1.0
+    } else {
+        1.0 - (t - 0.2) / 0.6
     }
 }
 

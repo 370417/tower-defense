@@ -1,4 +1,5 @@
 use float_ord::FloatOrd;
+use serde::{Deserialize, Serialize};
 
 use crate::{
     walker::Walker,
@@ -6,7 +7,7 @@ use crate::{
 };
 
 /// A movalbe object.
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct Mob {
     pub x: f32,
     pub y: f32,
@@ -28,7 +29,7 @@ impl Mob {
 
 impl World {
     pub fn remember_mob_positions(&mut self) {
-        for mob in self.mobs.values_mut() {
+        for mob in self.core_state.mobs.values_mut() {
             mob.old_x = mob.x;
             mob.old_y = mob.y;
         }

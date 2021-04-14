@@ -2,6 +2,8 @@
 
 use std::f32::consts::PI;
 
+use serde::{Deserialize, Serialize};
+
 use crate::{
     collision::resolve_collisions,
     distance::fast_distance,
@@ -15,6 +17,7 @@ const EXPLOSION_DURATION: u32 = 16;
 /// A stationary explosion that expands over time (eased by a sine wave).
 /// We keep track of old_radius to tell when entities cross the edge of the
 /// explosion.
+#[derive(Serialize, Deserialize)]
 pub struct Explosion {
     center_x: f32,
     center_y: f32,
@@ -50,7 +53,7 @@ impl World {
     pub fn update_explosions(&mut self) {
         let mut trash = Vec::new();
 
-        for (&entity, explosion) in &mut self.explosions {
+        for (&entity, explosion) in &mut self.core_state.explosions {
             if explosion.age < EXPLOSION_DURATION {
                 explosion.age += 1;
                 let progress = explosion.age as f32 / EXPLOSION_DURATION as f32;
@@ -66,8 +69,8 @@ impl World {
                 // in the past. So we don't apply an impulse if the mob was
                 // already touching the explosion the previous tick.
 
-                for (entity, impulse) in &mut self.impulses {
-                    if let Some(mob) = &mut self.mobs.get(entity) {
+                for (entity, impulse) in &mut self.core_state.impulses {
+                    if let Some(mob) = &mut self.core_state.mobs.get(entity) {
                         let distance_x = mob.x - explosion.center_x;
                         let distance_y = mob.y - explosion.center_y;
                         let distance_squared = distance_x * distance_x + distance_y * distance_y;
@@ -104,13 +107,14 @@ impl World {
             }
         }
         for entity in trash {
-            self.explosions.remove(&entity);
+            self.core_state.explosions.remove(&entity);
             recycle_explosion(entity);
         }
     }
 }
 
 /// Represents decaying impulses on an entity. Decay happens multiplicatively.
+#[derive(Serialize, Deserialize)]
 pub struct Impulse {
     pub dx: f32,
     pub dy: f32,
@@ -120,9 +124,9 @@ const IMPULSE_DECAY: f32 = 0.95;
 
 impl World {
     pub fn update_impulses(&mut self) {
-        for (entity, impulse) in &mut self.impulses {
-            let mob = self.mobs.get_mut(entity);
-            let is_walker = self.walkers.contains_key(entity);
+        for (entity, impulse) in &mut self.core_state.impulses {
+            let mob = self.core_state.mobs.get_mut(entity);
+            let is_walker = self.core_state.walkers.contains_key(entity);
 
             if let Some(mob) = mob {
                 if is_walker {
@@ -141,14 +145,14 @@ impl World {
                     mob.y += impulse.dy;
 
                     let impact = resolve_collisions(
-                        &self.map,
+                        &self.level_state.map,
                         &mut mob.x,
                         &mut mob.y,
                         STANDARD_ENEMY_RADIUS,
                     );
 
                     let zero = Velocity { dx: 0.0, dy: 0.0 };
-                    if walk_direction(&self.map, mob.x, mob.y) == zero {
+                    if walk_direction(&self.level_state.map, mob.x, mob.y) == zero {
                         // potentially remove the mob?
                     }
 

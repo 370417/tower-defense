@@ -62,15 +62,7 @@
         #side[data-tower='fire'] .fire.tower,
         #side[data-tower='missile'] .missile.tower,
         #side[data-tower='tree'] .tree.tower,
-        #side[data-tower='factory'] .factory.tower,
-        #side[data-clicked-tower='swallow'] .swallow.tower,
-        #side[data-clicked-tower='falcon'] .falcon.tower,
-        #side[data-clicked-tower='tesla'] .tesla.tower,
-        #side[data-clicked-tower='gauss'] .gauss.tower,
-        #side[data-clicked-tower='fire'] .fire.tower,
-        #side[data-clicked-tower='missile'] .missile.tower,
-        #side[data-clicked-tower='tree'] .tree.tower,
-        #side[data-clicked-tower='factory'] .factory.tower {
+        #side[data-tower='factory'] .factory.tower {
             opacity: 1;
         }
 
@@ -92,30 +84,24 @@
 
         .tower:nth-child(4n+ 1),
         .blue {
-            /* background: #00A1F1; */
             background-color: rgb(212, 232, 238);
             /* d4e8ee */
         }
 
         .tower:nth-child(4n+ 3),
         .red {
-            /* background: #F65314; */
-            background-color: rgb(251, 151, 139);
             background-color: rgb(245, 190, 197);
             /* f5bec5 */
         }
 
         .tower:nth-child(4n+ 4),
         .green {
-            /* background: #7CBB00; */
-            background-color: rgb(132, 203, 131);
             background-color: rgb(192, 230, 191);
             /* c0e6bf */
         }
 
         .tower:nth-child(4n+ 2),
         .yellow {
-            /* background: #FFBB00; */
             background-color: rgb(238, 220, 186);
             /* eedcba */
         }
@@ -171,22 +157,15 @@
             display: block;
         }
 
-        #side[data-tower='swallow'] .swallow.tower-stats,
-        #side[data-tower='falcon'] .falcon.tower-stats,
-        #side[data-tower='tesla'] .tesla.tower-stats,
-        #side[data-tower='gauss'] .gauss.tower-stats,
-        #side[data-tower='fire'] .fire.tower-stats,
-        #side[data-tower='missile'] .missile.tower-stats,
-        #side[data-tower='tree'] .tree.tower-stats,
-        #side[data-tower='factory'] .factory.tower-stats {
+        #side[data-tower]:not([data-tower='']) #tower-stats {
             display: block;
         }
 
-        .tower-stats {
+        #tower-stats {
             display: none;
         }
 
-        .tower-stats em {
+        #tower-stats em {
             /* opacity: 0.5; */
             font-family: Georgia, serif;
         }
@@ -214,23 +193,12 @@
             z-index: 1;
         }
 
-        .bar::before {
-            content: '';
+        .barline {
             position: absolute;
             bottom: 0;
             left: 0;
             width: 100%;
             height: 1px;
-            background: #e8e8e8;
-        }
-
-        .barline {
-            position: absolute;
-            bottom: 0;
-            left: 0;
-            width: attr(data-val);
-            height: 1px;
-            background: #000;
         }
 
         #wave-info {
@@ -278,7 +246,7 @@
         }
 
         .back::after {
-            content: 'Undo';
+            content: 'Previous Wave (H)';
         }
 
         .pause {
@@ -286,7 +254,7 @@
         }
 
         .pause::after {
-            content: 'Pause';
+            content: 'Pause (J)';
         }
 
         .play {
@@ -294,7 +262,7 @@
         }
 
         .play::after {
-            content: 'Play';
+            content: 'Play (J)';
         }
 
         .speed {
@@ -302,7 +270,7 @@
         }
 
         .speed::after {
-            content: 'Fast Forward';
+            content: 'Fast Forward (K)';
         }
 
         .next {
@@ -310,7 +278,7 @@
         }
 
         .next::after {
-            content: 'Send Next Wave';
+            content: 'Send Next Wave (L)';
         }
     </style>
 </head>
@@ -330,136 +298,25 @@
                     <button class="square missile tower">Missile Launcher</button>
                     <button class="square factory tower">Factory</button>
                 </div>
-                <div class="tower-stats swallow">
-                    <div class="tower-name blue">Swallow <span>cost 3s</span></div>
-                    <div class="bar" data-val="25%"><span>Damage</span><span>5</span>
-                        <div class="barline" style="width: 25%;"></div>
+                <div id="tower-stats">
+                    <div class="tower-name"><span id="tower-title">Swallow</span> <span id="tower-cost">cost 3s</span>
                     </div>
-                    <div class="bar" data-val="85%"><span>Unladen airspeed</span><span>9.75</span>
-                        <div class="barline" style="width: 85%;"></div>
+                    <div id="damage" class="bar"><span>Damage</span><span class="val">5</span>
+                        <div class="barline"></div>
                     </div>
-                    <div class="bar" data-val="15%"><span>Range</span><span>2.6</span>
-                        <div class="barline" style="width: 15%;"></div>
+                    <div id="rate-of-fire" class="bar"><span id="rate-of-fire-title">Airspeed</span><span
+                            class="val">9.75
+                            tiles/sec</span>
+                        <div class="barline"></div>
                     </div>
-                    <p>
+                    <div id="range" class="bar"><span>Range</span><span class="val">2.6</span>
+                        <div class="barline"></div>
+                    </div>
+                    <p id="description">
                         Attacks faster as enemies get closer.
                     </p>
-                    <em>Unladen airspeed: 9.75 tiles per second.</em>
+                    <em id="flavor">Unladen airspeed: 9.75 tiles per second.</em>
                 </div>
-                <div class="tower-stats falcon">
-                    <div class="tower-name blue">Falcon <span>cost 6s</span></div>
-                    <div class="bar" data-val="25%"><span>Damage</span><span>40</span>
-                        <div class="barline" style="width: 80%;"></div>
-                    </div>
-                    <div class="bar" data-val="85%"><span>Rate of fire</span><span>0.3</span>
-                        <div class="barline" style="width: 12%;"></div>
-                    </div>
-                    <div class="bar" data-val="15%"><span>Range</span><span>4.6</span>
-                        <div class="barline" style="width: 35%;"></div>
-                    </div>
-                    <p>
-                        Scatters enemies as it dives.
-                    </p>
-                    <em>Frightful.</em>
-                </div>
-                <div class="tower-stats tesla">
-                    <div class="tower-name yellow">Tesla <span>cost 3.5s × 2</span></div>
-                    <div class="bar" data-val="25%"><span>Damage</span><span>20</span>
-                        <div class="barline" style="width: 65%;"></div>
-                    </div>
-                    <div class="bar" data-val="85%"><span>Rate of fire</span><span>0.8</span>
-                        <div class="barline" style="width: 20%;"></div>
-                    </div>
-                    <div class="bar" data-val="15%"><span>Range</span><span>2</span>
-                        <div class="barline" style="width: 10%;"></div>
-                    </div>
-                    <p>
-                        Generates lightning between pairs of towers.
-                    </p>
-                    <em>“Is nature a giant cat? If so, who strokes its back?”</em>
-                </div>
-                <div class="tower-stats gauss">
-                    <div class="tower-name yellow">Gauss <span>cost 7s × 2</span></div>
-                    <div class="bar" data-val="25%"><span>Damage</span><span>25</span>
-                        <div class="barline" style="width: 50%;"></div>
-                    </div>
-                    <div class="bar" data-val="85%"><span>Rate of fire</span><span>0.5</span>
-                        <div class="barline" style="width: 16%;"></div>
-                    </div>
-                    <div class="bar" data-val="15%"><span>Range</span><span>∞</span>
-                        <div class="barline" style="width: 100%;"></div>
-                    </div>
-                    <p>
-                        Fires in a fixed direction. Can be chained end-to-end.
-                    </p>
-                    <em>“Theory attracts practice as the magnet attracts iron.”</em>
-                </div>
-                <div class="tower-stats fire">
-                    <div class="tower-name red">Fire <span>cost 4s</span></div>
-                    <div class="bar" data-val="25%"><span>Damage</span><span>5Hz</span>
-                        <div class="barline" style="width: 25%;"></div>
-                    </div>
-                    <div class="bar" data-val="85%"><span>Rate of fire</span><span>∞</span>
-                        <div class="barline" style="width: 100%;"></div>
-                    </div>
-                    <div class="bar" data-val="15%"><span>Range</span><span>2.6</span>
-                        <div class="barline" style="width: 15%;"></div>
-                    </div>
-                    <p>
-                        Deals damage over time.
-                    </p>
-                    <em>“Build a man a fire, and he'll be warm for a day.” Set a man on
-                        fire, and he'll be warm for the rest of his life.</em>
-                </div>
-                <div class="tower-stats missile">
-                    <div class="tower-name red">Missile <span>cost 10s</span></div>
-                    <div class="bar" data-val="25%"><span>Damage</span><span>15</span>
-                        <div class="barline" style="width: 25%;"></div>
-                    </div>
-                    <div class="bar" data-val="85%"><span>Rate of fire</span><span>1</span>
-                        <div class="barline" style="width: 40%;"></div>
-                    </div>
-                    <div class="bar" data-val="15%"><span>Range</span><span>6.4</span>
-                        <div class="barline" style="width: 70%;"></div>
-                    </div>
-                    <p>
-                        Deals splash damage from afar.
-                    </p>
-                    <em>Anti-ninja technology.</em>
-                </div>
-                <div class="tower-stats tree">
-                    <div class="tower-name green">Tree <span>cost 5s</span></div>
-                    <div class="bar" data-val="25%"><span>Damage</span><span>1</span>
-                        <div class="barline" style="width: 5%;"></div>
-                    </div>
-                    <div class="bar" data-val="85%"><span>Rate of fire</span><span>0.3</span>
-                        <div class="barline" style="width: 12%;"></div>
-                    </div>
-                    <div class="bar" data-val="15%"><span>Range</span><span>3.1</span>
-                        <div class="barline" style="width: 20%;"></div>
-                    </div>
-                    <p>
-                        Slows and roots all enemies in range.
-                    </p>
-                </div>
-                <div class="tower-stats factory">
-                    <div class="tower-name green">Factory <span>cost 20s</span></div>
-                    <div class="bar" data-val="25%"><span>Damage</span><span>0</span>
-                        <div class="barline" style="width: 0%;"></div>
-                    </div>
-                    <div class="bar" data-val="85%"><span>Rate of fire</span><span>0</span>
-                        <div class="barline" style="width: 0%;"></div>
-                    </div>
-                    <div class="bar" data-val="15%"><span>Range</span><span>2.6</span>
-                        <div class="barline" style="width: 15%;"></div>
-                    </div>
-                    <p>
-                        Helps build and upgrade adjacent towers.
-                    </p>
-                </div>
-                <!-- <strong>Swallow Tower</strong>
-            <div>Max DPS: ~30</div>
-            <div>Range: 2.6</div> -->
                 <!-- <p>
                 "Dead tree" icon by Sewon Park, from the noun project. No modifications made.
                 Link: https://thenounproject.com/search/?q=dead+tree&i=2048448
@@ -492,7 +349,7 @@
             </div>
             <div class="spacer"></div>
             <div id="wave-info">
-                <span>Next wave in</span>
+                <span>Wave X arrives in</span>
                 <span>35s</span>
                 <span>a</span>
                 <span>b</span>

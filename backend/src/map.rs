@@ -223,7 +223,9 @@ pub fn has_border(
     let tile_a = map.get(true_row_a * TRUE_MAP_WIDTH + true_col_a);
     let tile_b = map.get(true_row_b * TRUE_MAP_WIDTH + true_col_b);
 
-    (tile_a == Some(&Tile::Empty)) ^ (tile_b == Some(&Tile::Empty))
+    (tile_a == Some(&Tile::OutOfBounds))
+        || (tile_b == Some(&Tile::OutOfBounds))
+        || ((tile_a == Some(&Tile::Empty)) ^ (tile_b == Some(&Tile::Empty)))
 }
 
 /// Call the external render functions. Only do this once per level, not once

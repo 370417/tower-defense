@@ -1,12 +1,14 @@
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 import { Container, Filter, Graphics, Loader, ParticleContainer, Point, Renderer, SimpleRope, Sprite, Texture, Ticker } from 'pixi.js';
-import { MAP_WIDTH, TILE_SIZE, MAP_HEIGHT, MS_PER_UPDATE, MAX_UPDATES_PER_TICK } from './constants';
-import { gameSpeed, isPaused } from './game-speed';
-import { initGridInput } from './input';
+import { MAP_WIDTH, TILE_SIZE, MAP_HEIGHT, MS_PER_UPDATE, MAX_UPDATES_PER_FRAME } from './constants';
+import { gameSpeed } from './game-speed';
+import { initGridInput, inputAvailable, localInputBuffer } from './input';
 import { drawGrid, initPathRendering } from './render/grid';
+import { renderProgress } from './render/radial-progress';
 import { initRangeRendering } from './render/range';
 import './settings';
 import './tower-select';
+import { clickedTower, hoveredTower, renderTowerSelect, selectedTowerIsDirty } from './tower-select';
 // import './ice';
 
 const rendererContainer = document.getElementById('grid') as HTMLDivElement;
@@ -65,8 +67,9 @@ loader
         const falconTexture = spritesheet.textures['falcon.png'] as Texture;
         const indicatorTexture = spritesheet.textures['exclamation.png'] as Texture;
         const missileTexture = spritesheet.textures['missile.png'] as Texture;
-        const whiteTexture = spritesheet.textures['white.png'] as Texture;
+        const missileTowerTexture = spritesheet.textures['missile-tower.png'] as Texture;
         const towerTexture = spritesheet.textures['tower.png'] as Texture;
+        const factoryTexture = spritesheet.textures['factory.png'] as Texture;
 
         // Organize visuals by layer
 
@@ -96,13 +99,10 @@ loader
         s.anchor.set(0.5, 0.5);
         s.x = 400;
         s.y = 400;
-        stage.addChild(s);
+        // stage.addChild(s);
 
         const towerLayer = new Container();
         stage.addChild(towerLayer);
-
-        const smokeLayer = new Container();
-        stage.addChild(smokeLayer);
 
         const projectileLayer = new Container();
         stage.addChild(projectileLayer);
@@ -111,9 +111,13 @@ loader
         stage.addChild(enemyLayer);
 
         const spriteLayer = new Container();
-        // spriteLayer.x = 0.5;
-        // spriteLayer.y = 0.5;
         stage.addChild(spriteLayer);
+
+        const progressLayer = new Container();
+        stage.addChild(progressLayer);
+
+        const smokeLayer = new Container();
+        stage.addChild(smokeLayer);
 
         const rangeLayer = new Container();
         stage.addChild(rangeLayer);
@@ -277,6 +281,7 @@ loader
             (window as any).render_smoke_trail = render_smoke_trail.bind(undefined, memModule.memory);
 
             const sprites: Sprite[] = [];
+            const buildProgress: Graphics[] = [];
 
             const world = worldModule.World.new();
 
@@ -334,9 +339,9 @@ loader
                             sprite.anchor.set(0.5, 1.0);
                             break;
                         case 5: // missile tower cover
-                            sprite.texture = whiteTexture;
-                            sprite.width = 10;
-                            sprite.height = 10;
+                            sprite.texture = missileTowerTexture;
+                            sprite.width = TILE_SIZE;
+                            sprite.height = TILE_SIZE;
                             sprite.anchor.set(0.5, 0.5);
                             break;
                         case 6: // tower border
@@ -345,12 +350,11 @@ loader
                             sprite.height = TILE_SIZE + 1;
                             sprite.anchor.set(0.5, 0.5);
                             break;
-                        case 7: // tower fill
-                            sprite.texture = whiteTexture;
-                            sprite.width = TILE_SIZE - 1;
-                            sprite.height = TILE_SIZE - 1;
-                            sprite.anchor.set(0, 0);
-                            break;
+                        case 7: // factory
+                            sprite.texture = factoryTexture;
+                            sprite.width = 0.9 * TILE_SIZE;
+                            sprite.height = 0.9 * TILE_SIZE;
+                            sprite.anchor.set(0.5, 0.5);
                     }
                     sprite.x = spriteXs[i];
                     sprite.y = spriteYs[i];
@@ -361,6 +365,29 @@ loader
                 for (let i = spriteCount; i < sprites.length; i++) {
                     sprites[i].visible = false;
                 }
+
+                world.dump_progress_data(frameFudge);
+
+                const progressCount = world.progress_count();
+                const progressXs = new Float32Array(memModule.memory.buffer, world.progress_x(), progressCount);
+                const progressYs = new Float32Array(memModule.memory.buffer, world.progress_y(), progressCount);
+                const progressVals = new Float32Array(memModule.memory.buffer, world.progress(), progressCount);
+
+                for (let i = buildProgress.length; i < progressCount; i++) {
+                    const graphics = new Graphics();
+                    buildProgress.push(graphics);
+                    progressLayer.addChild(graphics);
+                }
+                for (let i = 0; i < progressCount; i++) {
+                    const graphics = buildProgress[i];
+                    graphics.visible = true;
+                    renderProgress(graphics, progressVals[i]);
+                    graphics.x = progressXs[i];
+                    graphics.y = progressYs[i];
+                }
+                for (let i = progressCount; i < buildProgress.length; i++) {
+                    buildProgress[i].visible = false;
+                }
             }
 
             // Input
@@ -368,7 +395,9 @@ loader
                 row: -1,
                 col: -1,
             };
-            initGridInput(rendererContainer, mouseHoverPos, []);
+            initGridInput(rendererContainer, mouseHoverPos);
+
+            // const nonGameplayMouseInput;
 
             // game loop with fixed time step, variable rendering */
             let lastUpdateTime = window.performance.now();
@@ -380,26 +409,69 @@ loader
                 lastUpdateTime = time;
                 lag += elapsed;
 
-                if (isPaused || lag > MS_PER_UPDATE * MAX_UPDATES_PER_TICK) {
+                if (lag > MS_PER_UPDATE * MAX_UPDATES_PER_FRAME) {
                     // Too much lag, just pretend it doesn't exist
                     lag = 0;
-                    // world.render(0); no point in rendering here?
                     // Don't even process input. Is this a good idea?
                     return;
                 }
 
+                // const tower = selectedTower();
+
                 if (mouseHoverPos.row >= 0 && mouseHoverPos.col >= 0) {
                     world.hover_map(0, mouseHoverPos.row, mouseHoverPos.col);
                 }
+                if (mouseHoverPos.row >= 0 && mouseHoverPos.col >= 0 && clickedTower?.towerStatus === 'prototype') {
+                    world.preview_build_tower(mouseHoverPos.row, mouseHoverPos.col, clickedTower.towerIndex);
+                } else {
+                    world.hide_preview_tower();
+                }
 
-                const msPerUpdate = MS_PER_UPDATE / gameSpeed();
+                if (selectedTowerIsDirty) {
+                    const tower = hoveredTower || clickedTower;
+                    if (tower) {
+                        switch (tower.towerStatus) {
+                            case 'prototype':
+                                renderTowerSelect(
+                                    world.query_tower_name(tower.towerIndex),
+                                    world.query_tower_base_damage(tower.towerIndex),
+                                    world.query_tower_base_cost(tower.towerIndex),
+                                    world.query_tower_base_rate_of_fire(tower.towerIndex),
+                                    world.query_tower_base_range(tower.towerIndex),
+                                    world.query_tower_description(tower.towerIndex),
+                                    world.query_tower_flavor(tower.towerIndex),
+                                );
+                                break;
+                            case 'building':
+                                break;
+                            case 'operational':
+                                break;
+                            case 'queued':
+                                break;
+                            case 'upgrading':
+                                break;
+                        }
+                    }
+                }
+
+                world.game_speed = gameSpeed();
 
                 let updates = 0;
-                while (lag >= msPerUpdate) {
+                while (lag >= MS_PER_UPDATE) {
+                    // Process input
+                    if (!inputAvailable) {
+                        return;
+                    }
+
+                    localInputBuffer.unshift([]);
+                    for (const input of localInputBuffer.pop() || []) {
+                        world.queue_build_tower(input.row, input.col, input.towerIndex);
+                    }
+
                     world.update();
                     updates += 1;
-                    lag -= msPerUpdate;
-                    if (updates > MAX_UPDATES_PER_TICK) {
+                    lag -= MS_PER_UPDATE;
+                    if (updates > MAX_UPDATES_PER_FRAME) {
                         world.render(1);
                         return;
                     }
@@ -408,8 +480,16 @@ loader
                 filter.uniforms.customUniform += 0.02;
                 filter.uniforms.customUniform %= 3.0;
 
-                world.render(lag / MS_PER_UPDATE);
-                render(lag / MS_PER_UPDATE);
+                // When the game is sped up, interpolation between frames
+                // will no longer be accurate. We extrapolate to fix it,
+                // but it's probably better to keep values reasonable at the
+                // cost of some visual stutter. Things will be moving too fast
+                // to tell anyways.
+                // But we do turn interpolation off when paused, since it
+                // causes things to vibrate around as fps fluctuates.
+                const frameFudge = gameSpeed() > 0 ? lag / MS_PER_UPDATE : 0;
+                world.render(frameFudge);
+                render(frameFudge);
                 renderer.render(stage);
             }
 
