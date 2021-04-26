@@ -16,6 +16,10 @@ for (let i = 0; i < tickDelay + 1; i++) {
     localInputBuffer.push([]);
 }
 
+export function bufferInput(input: Input): void {
+    localInputBuffer[0].push(input);
+}
+
 export const inputAvailable = true;
 
 type Input = {
@@ -23,6 +27,14 @@ type Input = {
     row: number,
     col: number,
     towerIndex: number,
+} | {
+    type: 'skip back',
+} | {
+    type: 'play pause',
+} | {
+    type: 'fast forward',
+} | {
+    type: 'send next wave'
 };
 
 // Instead of calling methods on world directly, we store events and pass them
@@ -55,7 +67,7 @@ export function initGridInput(canvas: HTMLElement, mousePos: Pos): void {
         const row = Math.floor(event.offsetY / TILE_SIZE);
         const col = Math.floor(event.offsetX / TILE_SIZE);
         if (clickedTower?.towerStatus === 'prototype') {
-            localInputBuffer[0].push({
+            bufferInput({
                 type: 'build tower',
                 row,
                 col,

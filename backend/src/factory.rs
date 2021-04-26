@@ -4,10 +4,11 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     build::BuildOrder,
+    config::Config,
     ease::ease_to_x_geometric,
     graphics::SpriteType,
     map::tile_center,
-    tower::{create_tower, Tower, TowerStatus, BASE_TOWERS, FACTORY_INDEX},
+    tower::{create_tower, Tower, TowerStatus, FACTORY_INDEX},
     world::{Map, RenderState, World},
 };
 
@@ -22,16 +23,10 @@ const MAX_ROTATION_SPEED: f32 = 0.03;
 const ACCELERATION: f32 = 0.0005;
 
 impl RenderState {
-    pub fn dump_factory(&mut self, row: usize, col: usize, rotation: f32, alpha: f32) {
+    pub fn dump_factory(&mut self, row: usize, col: usize, rotation: f32, color: u32, alpha: f32) {
         let (x, y) = tile_center(row, col);
-        self.sprite_data.push(
-            SpriteType::TowerBase as u8,
-            x,
-            y,
-            0.0,
-            alpha,
-            BASE_TOWERS[FACTORY_INDEX].color,
-        );
+        self.sprite_data
+            .push(SpriteType::TowerBase as u8, x, y, 0.0, alpha, color);
         self.sprite_data
             .push(SpriteType::Factory as u8, x, y, rotation, alpha, 0x000000);
     }
@@ -45,6 +40,7 @@ pub fn create_factory(
     towers_by_pos: &mut Map<(usize, usize), u32>,
     factories: &mut Map<u32, Factory>,
     build_orders: &mut VecDeque<BuildOrder>,
+    config: &Config,
 ) -> u32 {
     create_tower(
         row,
@@ -54,6 +50,7 @@ pub fn create_factory(
         towers,
         towers_by_pos,
         build_orders,
+        config,
     );
 
     factories.insert(
@@ -77,8 +74,13 @@ impl World {
                 } else {
                     1.0
                 };
-                self.render_state
-                    .dump_factory(tower.row, tower.col, factory.rotation, alpha);
+                self.render_state.dump_factory(
+                    tower.row,
+                    tower.col,
+                    factory.rotation,
+                    self.config.common[FACTORY_INDEX].color,
+                    alpha,
+                );
             }
         }
     }

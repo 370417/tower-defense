@@ -1,0 +1,85 @@
+[[waves]]
+
+[[waves.group]]
+size = 5
+type = "Circle"
+
+[[common]]
+name = "Swallow"
+base_damage = 1.0
+base_rate_of_fire = 97.5
+base_range = 3.6
+cost = 3.0
+description = "Attacks faster as enemies get closer."
+flavor = "“African or European?”"
+color = 0xd4e8ee
+
+[[common]]
+name = "Tesla"
+base_damage = 1.0
+base_rate_of_fire = 1.0
+base_range = 1.0
+cost = 3.5
+description = "Generates lightning between pairs of towers."
+flavor = ""
+color = 0xeedcba
+
+[[common]]
+name = "Fire"
+base_damage = 1.0
+base_rate_of_fire = inf
+base_range = 1.0
+cost = 4.0
+description = "Deals damage over time."
+flavor = "“Build a man a fire and he'll be warm for a day.”"
+color = 0xf5bec5
+
+[[common]]
+name = "Tree"
+base_damage = 1.0
+base_rate_of_fire = 1.0
+base_range = 1.0
+cost = 5.0
+description = "Slows and roots all enemies in range."
+flavor = ""
+color = 0xc0e6bf
+
+[[common]]
+name = "Falcon"
+base_damage = 1.0
+base_rate_of_fire = 1.0
+base_range = 6.0
+cost = 6.0
+description = "Dives down and scatters nearby enemies."
+flavor = "Frightful."
+color = 0xd4e8ee
+
+[[common]]
+name = "Gauss"
+base_damage = 1.0
+base_rate_of_fire = 1.0
+base_range = 1.0
+cost = 7.0
+description = "Fires in a fixed direction. Can be chained end-to-end."
+flavor = "“Theory attracts practice as the magnet attracts iron.”"
+color = 0xeedcba
+
+[[common]]
+name = "Missile"
+base_damage = 1.0
+base_rate_of_fire = 1.0
+base_range = 6.4
+cost = 8.0
+description = "Fires missiles that deal splash damage."
+flavor = "Anti-ninja technology."
+color = 0xf5bec5
+
+[[common]]
+name = "Factory"
+base_damage = 0.0
+base_rate_of_fire = 0.0
+base_range = 1.0
+cost = 20.0
+description = "Helps build and upgrade adjacent towers."
+flavor = ""
+color = 0xc0e6bf

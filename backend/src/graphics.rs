@@ -1,6 +1,6 @@
 use wasm_bindgen::prelude::*;
 
-use crate::{build::dump_preview_tower, map::tile_center, world::World};
+use crate::{map::tile_center, world::World};
 
 /// Stores rendering information for every visible sprite in the game.
 /// Intended to be read from js.
@@ -80,6 +80,11 @@ impl World {
     }
 
     pub fn dump_sprite_data(&mut self, frame_fudge: f32) {
+        let frame_fudge = match self.run_state {
+            crate::world::RunState::Playing => frame_fudge,
+            _ => 0.0,
+        };
+
         // Order matters: sprites pushed first get rendered in the back.
         self.render_state.sprite_data.clear();
 
@@ -89,6 +94,7 @@ impl World {
                 id,
                 &mut self.render_state.sprite_data,
                 &self.core_state.towers,
+                &self.config,
             );
         }
         self.dump_missile_towers(frame_fudge);
@@ -112,11 +118,7 @@ impl World {
                 frame_fudge,
             );
         }
-        dump_preview_tower(
-            &self.render_state.preview_tower,
-            &mut self.render_state.sprite_data,
-            &self.level_state.map,
-        );
+        self.dump_preview_tower();
         for (id, falcon) in &self.core_state.falcons {
             falcon.dump(
                 id,
@@ -151,7 +153,11 @@ impl World {
     /// array, and we need to store it in the world so that it doesn't get
     /// dropped.
     pub fn render(&mut self, frame_fudge: f32) {
-        for (&_id, smoke_trail) in &mut self.core_state.smoke_trails {
+        let frame_fudge = match self.run_state {
+            crate::world::RunState::Playing => frame_fudge,
+            _ => 0.0,
+        };
+        for (&_id, smoke_trail) in &mut self.render_state.smoke_trails {
             smoke_trail.render(frame_fudge, self.core_state.tick);
         }
     }

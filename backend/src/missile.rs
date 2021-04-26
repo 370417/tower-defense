@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     build::BuildOrder,
+    config::Config,
     ease::ease_to_x_geometric,
     explosion::spawn_explosion,
     graphics::SpriteType,
@@ -16,7 +17,7 @@ use crate::{
     mob::Mob,
     smoke::spawn_smoke_trail,
     targeting::{find_target, Targeting, Threat, THREAT_DISTANCE},
-    tower::{create_tower, Tower, TowerStatus, BASE_TOWERS, MISSILE_INDEX},
+    tower::{create_tower, Tower, TowerStatus, MISSILE_INDEX},
     walker::STANDARD_ENEMY_RADIUS,
     world::{Map, World},
 };
@@ -64,6 +65,7 @@ pub fn create_missile_tower(
     towers_by_pos: &mut Map<(usize, usize), u32>,
     spawners: &mut Map<u32, MissileSpawner>,
     build_orders: &mut VecDeque<BuildOrder>,
+    config: &Config,
 ) -> u32 {
     create_tower(
         row,
@@ -73,6 +75,7 @@ pub fn create_missile_tower(
         towers,
         towers_by_pos,
         build_orders,
+        config,
     );
     spawners.insert(
         entity,
@@ -181,7 +184,7 @@ impl World {
                         );
                         spawn_smoke_trail(
                             &mut self.core_state.entity_ids,
-                            &mut self.core_state.smoke_trails,
+                            &mut self.render_state.smoke_trails,
                             entity,
                         );
                         spawner.right_reload_countdown = spawner.reload_cost;
@@ -204,7 +207,7 @@ impl World {
                         );
                         spawn_smoke_trail(
                             &mut self.core_state.entity_ids,
-                            &mut self.core_state.smoke_trails,
+                            &mut self.render_state.smoke_trails,
                             entity,
                         );
                         spawner.left_reload_countdown = spawner.reload_cost;
@@ -243,6 +246,7 @@ impl World {
                             missile_tip_x,
                             missile_tip_y,
                             1.2 * f32::TILE_SIZE,
+                            missile.damage(&self.config),
                         );
                         trash.push(entity);
                         continue;
@@ -320,7 +324,7 @@ impl World {
                     tower_y,
                     0.0,
                     1.0,
-                    BASE_TOWERS[MISSILE_INDEX].color,
+                    self.config.common[MISSILE_INDEX].color,
                 );
 
                 let left_peek = 3.0
@@ -358,7 +362,7 @@ impl World {
                     tower_y - recoil_amount * sin,
                     rotation,
                     1.0,
-                    BASE_TOWERS[MISSILE_INDEX].color,
+                    self.config.common[MISSILE_INDEX].color,
                 );
             }
         }
@@ -378,6 +382,10 @@ impl Missile {
             acceleration: ACCELERATION,
             age: 0,
         }
+    }
+
+    fn damage(&self, config: &Config) -> f32 {
+        config.common[MISSILE_INDEX].base_damage
     }
 }
 

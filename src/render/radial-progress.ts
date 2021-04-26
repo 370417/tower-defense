@@ -13,8 +13,6 @@ export function renderProgress(graphics: Graphics, progress: number): void {
 
     graphics.clear();
 
-    console.log(1);
-
     if (progress >= 1) {
         return;
     }

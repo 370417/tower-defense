@@ -1,5 +1,7 @@
-export let isPaused = false;
-export let isSpedUp = false;
+import { bufferInput } from './input';
+
+export const isPaused = false;
+export const isSpedUp = false;
 
 export function gameSpeed(): number {
     if (isPaused) {
@@ -20,21 +22,31 @@ playPauseButton.addEventListener('click', playPause);
 speedButton.addEventListener('click', toggleSpeed);
 
 function playPause() {
-    if (isPaused) {
-        isPaused = false;
-        playPauseButton.classList.replace('play', 'pause');
-    } else {
-        isPaused = true;
-        playPauseButton.classList.replace('pause', 'play');
-    }
+    bufferInput({ type: 'play pause' });
+    // if (isPaused) {
+    //     isPaused = false;
+    //     playPauseButton.classList.replace('play', 'pause');
+    // } else {
+    //     isPaused = true;
+    //     playPauseButton.classList.replace('pause', 'play');
+    // }
 }
 
 function toggleSpeed() {
-    if (isSpedUp) {
-        isSpedUp = false;
-        speedButton.classList.remove('fast');
-    } else {
-        isSpedUp = true;
-        speedButton.classList.add('fast');
-    }
+    bufferInput({ type: 'fast forward' });
+    // if (isSpedUp) {
+    //     isSpedUp = false;
+    //     speedButton.classList.remove('fast');
+    // } else {
+    //     isSpedUp = true;
+    //     speedButton.classList.add('fast');
+    // }
 }
+
+backButton.addEventListener('click', () => {
+    bufferInput({ type: 'skip back' });
+});
+
+nextButton.addEventListener('click', () => {
+    bufferInput({ type: 'send next wave' });
+});

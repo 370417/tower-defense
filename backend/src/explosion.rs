@@ -25,6 +25,8 @@ pub struct Explosion {
     old_radius: f32,
     radius: f32,
     max_radius: f32,
+    touched_entities: Vec<u32>,
+    damage: f32,
 }
 
 pub fn spawn_explosion(
@@ -33,6 +35,7 @@ pub fn spawn_explosion(
     x: f32,
     y: f32,
     max_radius: f32,
+    damage: f32,
 ) {
     create_explosion(id, x, y);
 
@@ -45,6 +48,8 @@ pub fn spawn_explosion(
             old_radius: 0.0,
             radius: 0.0,
             max_radius,
+            touched_entities: Vec::new(),
+            damage,
         },
     );
 }
@@ -75,21 +80,13 @@ impl World {
                         let distance_y = mob.y - explosion.center_y;
                         let distance_squared = distance_x * distance_x + distance_y * distance_y;
 
-                        let old_distance_x = mob.old_x - explosion.center_x;
-                        let old_distance_y = mob.old_y - explosion.center_y;
-                        let old_distance_squared =
-                            old_distance_x * old_distance_x + old_distance_y * old_distance_y;
-
                         let radius_squared = (STANDARD_ENEMY_RADIUS + explosion.radius)
                             * (STANDARD_ENEMY_RADIUS + explosion.radius);
 
-                        let old_radius_squared = (STANDARD_ENEMY_RADIUS + explosion.old_radius)
-                            * (STANDARD_ENEMY_RADIUS + explosion.old_radius);
-
                         if distance_squared <= radius_squared
-                            && (explosion.old_radius == 0.0
-                                || old_distance_squared > old_radius_squared)
+                            && !explosion.touched_entities.contains(entity)
                         {
+                            explosion.touched_entities.push(*entity);
                             let distance = distance_squared.sqrt();
 
                             let normalized_x = (mob.x - explosion.center_x) / distance;
@@ -99,6 +96,11 @@ impl World {
                                 * (1.5 - 0.5 * explosion.radius / explosion.max_radius);
                             impulse.dy += normalized_y
                                 * (1.5 - 0.5 * explosion.radius / explosion.max_radius);
+
+                            // Deal damage
+                            if let Some(health) = self.core_state.health.get_mut(entity) {
+                                health.curr_health -= explosion.damage;
+                            }
                         }
                     }
                 }
@@ -114,7 +116,7 @@ impl World {
 }
 
 /// Represents decaying impulses on an entity. Decay happens multiplicatively.
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Default)]
 pub struct Impulse {
     pub dx: f32,
     pub dy: f32,

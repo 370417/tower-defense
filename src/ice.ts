@@ -1,4 +1,6 @@
-const size = 256;
+import { Texture } from 'pixi.js';
+
+const size = 64;
 
 const canvas = document.createElement('canvas');
 canvas.width = size;
@@ -6,18 +8,20 @@ canvas.height = size;
 const ctx = canvas.getContext('2d') as CanvasRenderingContext2D;
 document.body.insertAdjacentElement('beforeend', canvas);
 
-// for (let y = 0; y < 64; y++) {
-//     for (let x = 0; x < 64; x++) {
-//         const dx = x - 64 / 2;
-//         const dy = y - 64 / 2;
-//         const theta = Math.atan2(dx, dy);
-//         const paint = 255 * (1 + theta / Math.PI) / 2;
-//         const distance = Math.sqrt(dx * dx + dy * dy) / 32;
-//         const distancePaint = 255 * Math.min(1, distance);
-//         ctx.fillStyle = `rgb(${paint},${distancePaint},${paint})`;
-//         ctx.fillRect(x, y, 1, 1);
-//     }
-// }
+export const shieldTexture = Texture.from(canvas);
+
+for (let y = 0; y < 64; y++) {
+    for (let x = 0; x < 64; x++) {
+        const dx = x - 64 / 2;
+        const dy = y - 64 / 2;
+        const theta = Math.atan2(dy, dx);
+        const paint = 255 * (1 + theta / Math.PI) / 2;
+        const distance = Math.sqrt(dx * dx + dy * dy) / 64;
+        const distancePaint = 255 * Math.min(1, distance);
+        ctx.fillStyle = `rgb(${paint},${distancePaint},${paint})`;
+        ctx.fillRect(x, y, 1, 1);
+    }
+}
 
 // const offscreenCanvas = document.createElement('canvas');
 // offscreenCanvas.width = size;

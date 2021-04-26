@@ -1,11 +1,13 @@
 mod build;
 mod collision;
+mod config;
 mod distance;
 mod ease;
 mod explosion;
 mod factory;
 mod falcon;
 mod graphics;
+mod health;
 mod map;
 mod missile;
 mod mob;
@@ -16,6 +18,7 @@ mod swallow;
 mod targeting;
 mod tower;
 mod walker;
+mod waves;
 mod world;
 
 // When the `wee_alloc` feature is enabled, use `wee_alloc` as the global

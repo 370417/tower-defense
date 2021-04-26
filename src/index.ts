@@ -9,7 +9,12 @@ import { initRangeRendering } from './render/range';
 import './settings';
 import './tower-select';
 import { clickedTower, hoveredTower, renderTowerSelect, selectedTowerIsDirty } from './tower-select';
-// import './ice';
+import './ice';
+import { shieldTexture } from './ice';
+
+// NB: I've had run-time borrow check errors caused by passing around the world
+// reference (ie copying a unique reference). For now, my way around that is
+// to keep all world references in one big function.
 
 const rendererContainer = document.getElementById('grid') as HTMLDivElement;
 
@@ -47,6 +52,7 @@ loader
     .add('ice_shader', 'ice_shader.frag')
     .add('spritesheet', 'texture-atlas.json')
     .add('ice', 'ice.png')
+    .add('config', 'config.toml')
     .load((loader, resources) => {
 
         const spritesheet = resources.spritesheet?.spritesheet;
@@ -283,7 +289,7 @@ loader
             const sprites: Sprite[] = [];
             const buildProgress: Graphics[] = [];
 
-            const world = worldModule.World.new();
+            const world = worldModule.World.new(resources.config?.data || '');
 
             function render(frameFudge: number) {
                 world.dump_sprite_data(frameFudge);
@@ -327,7 +333,7 @@ loader
                             sprite.anchor.set(0.5, 0.5);
                             break;
                         case 3:
-                            sprite.texture = circleTexture;
+                            sprite.texture = shieldTexture;
                             sprite.width = 0.6 * TILE_SIZE;
                             sprite.height = 0.6 * TILE_SIZE;
                             sprite.anchor.set(0.5, 0.5);
@@ -454,10 +460,10 @@ loader
                     }
                 }
 
-                world.game_speed = gameSpeed();
+                const msPerUpdate = MS_PER_UPDATE / gameSpeed();
 
                 let updates = 0;
-                while (lag >= MS_PER_UPDATE) {
+                while (lag >= msPerUpdate) {
                     // Process input
                     if (!inputAvailable) {
                         return;
@@ -465,12 +471,21 @@ loader
 
                     localInputBuffer.unshift([]);
                     for (const input of localInputBuffer.pop() || []) {
-                        world.queue_build_tower(input.row, input.col, input.towerIndex);
+                        switch (input.type) {
+                            case 'build tower':
+                                world.queue_build_tower(input.row, input.col, input.towerIndex);
+                                break;
+                            case 'skip back':
+                                console.time();
+                                world.save();
+                                console.timeEnd();
+                                break;
+                        }
                     }
 
                     world.update();
                     updates += 1;
-                    lag -= MS_PER_UPDATE;
+                    lag -= msPerUpdate;
                     if (updates > MAX_UPDATES_PER_FRAME) {
                         world.render(1);
                         return;
@@ -480,14 +495,9 @@ loader
                 filter.uniforms.customUniform += 0.02;
                 filter.uniforms.customUniform %= 3.0;
 
-                // When the game is sped up, interpolation between frames
-                // will no longer be accurate. We extrapolate to fix it,
-                // but it's probably better to keep values reasonable at the
-                // cost of some visual stutter. Things will be moving too fast
-                // to tell anyways.
-                // But we do turn interpolation off when paused, since it
+                // We turn interpolation off when paused, since it
                 // causes things to vibrate around as fps fluctuates.
-                const frameFudge = gameSpeed() > 0 ? lag / MS_PER_UPDATE : 0;
+                const frameFudge = gameSpeed() > 0 ? lag / msPerUpdate : 0;
                 world.render(frameFudge);
                 render(frameFudge);
                 renderer.render(stage);

@@ -206,6 +206,44 @@ pub fn parse(map_str: &[&str]) -> Vec<Tile> {
     parsed_map
 }
 
+/// A tile counts as an entrance tile if it is just out of the visible area and
+/// points inward.
+pub fn entrances(map: &[Tile]) -> Vec<(usize, usize)> {
+    let mut entrances = Vec::new();
+
+    for row in 0..MAP_HEIGHT {
+        let true_row = 2 + row;
+        let true_col = 1;
+
+        if map[true_row * TRUE_MAP_WIDTH + true_col] == Tile::East {
+            entrances.push((true_row, true_col));
+        }
+
+        let true_col = MAP_WIDTH + 1;
+
+        if map[true_row * TRUE_MAP_WIDTH + true_col] == Tile::West {
+            entrances.push((true_row, true_col));
+        }
+    }
+
+    for col in 0..MAP_WIDTH {
+        let true_row = 1;
+        let true_col = 2 + col;
+
+        if map[true_row * TRUE_MAP_WIDTH + true_col] == Tile::South {
+            entrances.push((true_row, true_col));
+        }
+
+        let true_row = MAP_HEIGHT + 1;
+
+        if map[true_row * TRUE_MAP_WIDTH + true_col] == Tile::North {
+            entrances.push((true_row, true_col));
+        }
+    }
+
+    entrances
+}
+
 /// Whether two adjacent tiles are separated by a border, like between the path
 /// and an empty tile or between an empty tile and the edge of the visible map.
 /// In the future, we may want to allow for borders between path tiles, for
@@ -275,6 +313,12 @@ pub fn true_row_col(x: f32, y: f32) -> (usize, usize) {
 pub fn tile_center(row: usize, col: usize) -> (f32, f32) {
     let x = (col as f32 + 0.5) * f32::TILE_SIZE;
     let y = (row as f32 + 0.5) * f32::TILE_SIZE;
+    (x, y)
+}
+
+pub fn true_tile_center(true_row: usize, true_col: usize) -> (f32, f32) {
+    let x = (true_col as f32 - 1.5) * f32::TILE_SIZE;
+    let y = (true_row as f32 - 1.5) * f32::TILE_SIZE;
     (x, y)
 }
 

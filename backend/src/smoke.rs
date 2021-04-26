@@ -14,7 +14,6 @@ use crate::{
 pub const SMOKE_TRAIL_LEN: usize = 24;
 const SMOKE_WIDTH: f32 = 2.0;
 
-#[derive(Serialize, Deserialize)]
 pub struct SmokeTrail {
     parent: u32,
     parent_is_valid: bool,
@@ -147,7 +146,7 @@ impl SmokeTrail {
 impl World {
     pub fn update_smoke(&mut self) {
         let mut trash = Vec::new();
-        for (entity, smoke_trail) in &mut self.core_state.smoke_trails {
+        for (entity, smoke_trail) in &mut self.render_state.smoke_trails {
             let parent_mob = self.core_state.mobs.get(&smoke_trail.parent);
             let parent_missile = self.core_state.missiles.get(&smoke_trail.parent);
             if let (Some(mob), Some(missile)) = (parent_mob, parent_missile) {
@@ -183,7 +182,7 @@ impl World {
             }
         }
         for entity in trash {
-            self.core_state.smoke_trails.remove(&entity);
+            self.render_state.smoke_trails.remove(&entity);
         }
     }
 }

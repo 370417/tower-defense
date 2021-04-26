@@ -10,12 +10,13 @@ use serde::{Deserialize, Serialize};
 use crate::{
     build::BuildOrder,
     collision::circle_line_intersection,
+    config::Config,
     ease::ease_to_x_geometric,
     graphics::{SpriteData, SpriteType},
     map::{tile_center, Constants},
     mob::{closest_walker, Mob},
     targeting::{find_target, Targeting, Threat},
-    tower::{create_tower, Tower, TowerStatus, BASE_TOWERS, SWALLOW_INDEX},
+    tower::{create_tower, Tower, TowerStatus, SWALLOW_INDEX},
     walker::STANDARD_ENEMY_RADIUS,
     world::{EntityIds, Map, World},
 };
@@ -119,7 +120,7 @@ impl SwallowAfterImage {
 }
 
 impl SwallowTargeter {
-    pub fn dump(&self, id: &u32, data: &mut SpriteData, towers: &Map<u32, Tower>) {
+    pub fn dump(&self, id: &u32, data: &mut SpriteData, towers: &Map<u32, Tower>, config: &Config) {
         if let Some(tower) = towers.get(id) {
             let (tower_x, tower_y) = tile_center(tower.row, tower.col);
 
@@ -129,7 +130,7 @@ impl SwallowTargeter {
                 tower_y,
                 0.0,
                 1.0,
-                BASE_TOWERS[SWALLOW_INDEX].color,
+                config.common[SWALLOW_INDEX].color,
             );
 
             if tower.status == TowerStatus::Queued {
@@ -156,6 +157,7 @@ pub fn create_swallow_tower(
     swallows: &mut Map<u32, Swallow>,
     mobs: &mut Map<u32, Mob>,
     build_orders: &mut VecDeque<BuildOrder>,
+    config: &Config,
 ) -> u32 {
     let tower_entity = entities.next();
     let swallow_entity = entities.next();
@@ -170,6 +172,7 @@ pub fn create_swallow_tower(
         towers,
         towers_by_pos,
         build_orders,
+        config,
     );
 
     swallow_targeters.insert(

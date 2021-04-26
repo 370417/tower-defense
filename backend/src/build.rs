@@ -2,14 +2,15 @@ use serde::{Deserialize, Serialize};
 use wasm_bindgen::prelude::*;
 
 use crate::{
+    config::Config,
     factory::create_factory,
     graphics::{SpriteData, SpriteType},
     map::{tile_center, Tile, TRUE_MAP_WIDTH},
     missile::create_missile_tower,
     swallow::create_swallow_tower,
     tower::{
-        Tower, TowerStatus, BASE_TOWERS, FACTORY_INDEX, FALCON_INDEX, FIRE_INDEX, GAUSS_INDEX,
-        MISSILE_INDEX, SWALLOW_INDEX, TESLA_INDEX, TREE_INDEX,
+        Tower, TowerStatus, FACTORY_INDEX, FALCON_INDEX, FIRE_INDEX, GAUSS_INDEX, MISSILE_INDEX,
+        SWALLOW_INDEX, TESLA_INDEX, TREE_INDEX,
     },
     world::{Map, World},
 };
@@ -75,7 +76,7 @@ impl BuildType {
 #[wasm_bindgen]
 impl World {
     pub fn preview_build_tower(&mut self, row: usize, col: usize, tower_index: usize) {
-        let base_tower = BASE_TOWERS.get(tower_index).unwrap_or(&BASE_TOWERS[0]);
+        let base_tower = self.config.get_common(tower_index);
         self.render_state.preview_tower = Some(Tower {
             row,
             col,
@@ -127,6 +128,14 @@ impl World {
                 }
             }
         }
+
+        // Now that we know for sure we will queue some construction, resume
+        // the game if autopaused
+        use crate::world::RunState;
+        if let RunState::AutoPaused = self.run_state {
+            self.run_state = RunState::Playing;
+        }
+
         if let Some(entity) = replace {
             // Make sure we remove any upgrades queued for the tower in addition
             // to the tower itself.
@@ -139,10 +148,11 @@ impl World {
             self.destroy_tower(entity);
         }
 
-        if let Some(base_tower) = BASE_TOWERS.get(tower_index) {
+        if let Some(base_tower) = self.config.common.get(tower_index) {
+            let cost = (base_tower.cost * 60.0) as u32;
             let tower_entity = self.create_specific_tower(tower_index, row, col);
             self.core_state.build_queue.push_back(BuildOrder {
-                cost: (base_tower.cost * 60.0) as u32,
+                cost,
                 progress: 0.0,
                 row,
                 col,
@@ -213,6 +223,15 @@ impl World {
             }
         }
 
+        if !completed_order_indeces.is_empty()
+            && completed_order_indeces.len() == self.core_state.build_queue.len()
+        {
+            use crate::world::RunState;
+            if let RunState::Playing = self.run_state {
+                self.run_state = RunState::AutoPaused;
+            }
+        }
+
         for i in completed_order_indeces.into_iter().rev() {
             self.core_state.build_queue.remove(i);
         }
@@ -263,6 +282,7 @@ impl World {
                 &mut self.core_state.swallows,
                 &mut self.core_state.mobs,
                 &mut self.core_state.build_queue,
+                &self.config,
             ),
             i if i == FALCON_INDEX => 0,
             i if i == TESLA_INDEX => 0,
@@ -276,6 +296,7 @@ impl World {
                 &mut self.core_state.towers_by_pos,
                 &mut self.core_state.missile_spawners,
                 &mut self.core_state.build_queue,
+                &self.config,
             ),
             i if i == TREE_INDEX => 0,
             i if i == FACTORY_INDEX => create_factory(
@@ -286,27 +307,31 @@ impl World {
                 &mut self.core_state.towers_by_pos,
                 &mut self.core_state.factories,
                 &mut self.core_state.build_queue,
+                &self.config,
             ),
             _ => 0,
         }
     }
-}
 
-pub fn dump_preview_tower(tower: &Option<Tower>, data: &mut SpriteData, map: &[Tile]) {
-    if let Some(tower) = tower {
-        let true_row = tower.row + 2;
-        let true_col = tower.col + 2;
-        let tint = match map[true_row * TRUE_MAP_WIDTH + true_col] {
-            Tile::Empty => {
-                BASE_TOWERS
-                    .get(tower.type_index)
-                    .unwrap_or(&BASE_TOWERS[0])
-                    .color
-            }
-            _ => 0xff0000,
-        };
-        let (x, y) = tile_center(tower.row, tower.col);
-        data.push(SpriteType::TowerBase as u8, x, y, 0.0, 0.5, tint);
+    pub fn dump_preview_tower(&mut self) {
+        if let Some(tower) = &self.render_state.preview_tower {
+            let true_row = tower.row + 2;
+            let true_col = tower.col + 2;
+            let tint = match self.level_state.map[true_row * TRUE_MAP_WIDTH + true_col] {
+                Tile::Empty => {
+                    self.config
+                        .common
+                        .get(tower.type_index)
+                        .unwrap_or(&Default::default())
+                        .color
+                }
+                _ => 0xff0000,
+            };
+            let (x, y) = tile_center(tower.row, tower.col);
+            self.render_state
+                .sprite_data
+                .push(SpriteType::TowerBase as u8, x, y, 0.0, 0.5, tint);
+        }
     }
 }
 

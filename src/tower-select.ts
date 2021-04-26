@@ -114,8 +114,6 @@ export function renderTowerSelect(
     rangeBar.style.background = formatGradient(range, 0, 15);
     description.textContent = descStr;
     flavor.textContent = flavorStr;
-
-    console.log(rangeBar.style.background, formatGradient(range, 0, 15));
 }
 
 export function cancelTowerSelect(): void {

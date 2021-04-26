@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     build::BuildOrder,
+    config::Config,
     graphics::{SpriteData, SpriteType},
     map::{tile_center, true_row_col, Constants},
     mob::Mob,
@@ -113,6 +114,7 @@ pub fn create_falcon_tower(
     falcons: &mut Map<u32, Falcon>,
     mobs: &mut Map<u32, Mob>,
     build_orders: &mut VecDeque<BuildOrder>,
+    config: &Config,
 ) {
     let tower_entity = entities.next();
     let falcon_entity = entities.next();
@@ -127,6 +129,7 @@ pub fn create_falcon_tower(
         towers,
         towers_by_pos,
         build_orders,
+        config,
     );
 
     falcons.insert(falcon_entity, Falcon::new_rising(tower_entity));
@@ -265,6 +268,7 @@ impl World {
     }
 }
 
+/// Return a falcon's opacity/alpha as a function of height.
 fn falcon_fade(normalized_height: f32) -> f32 {
     let normalized_height = normalized_height.max(0.0).min(1.0);
     if normalized_height < 0.6 {
