@@ -236,7 +236,7 @@
             transform: translateX(-50%);
         }
 
-        .square.play,
+        .square[data-state='paused'],
         .square.speed.fast {
             background-color: #CCC;
         }
@@ -249,19 +249,21 @@
             content: 'Previous Wave (H)';
         }
 
-        .pause {
+        [data-state='playing'] {
             background-image: url(icons/pause-solid.svg);
         }
 
-        .pause::after {
+        [data-state='playing']::after {
             content: 'Pause (J)';
         }
 
-        .play {
+        [data-state='paused'],
+        [data-state='autopaused'] {
             background-image: url(icons/play-solid.svg);
         }
 
-        .play::after {
+        [data-state='paused']::after,
+        [data-state='autopaused']::after {
             content: 'Play (J)';
         }
 
@@ -356,7 +358,7 @@
                 <span>c</span>
                 <span>d</span>
                 <button class="square back">Skip Back</button>
-                <button class="square pause">Play/Pause</button>
+                <button class="square pause" data-state="autopaused">Play/Pause</button>
                 <button class="square speed">Fast Forward</button>
                 <button class="square next">Send Next Wave</button>
             </div>

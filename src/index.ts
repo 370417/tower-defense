@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 import { Container, Filter, Graphics, Loader, ParticleContainer, Point, Renderer, SimpleRope, Sprite, Texture, Ticker } from 'pixi.js';
 import { MAP_WIDTH, TILE_SIZE, MAP_HEIGHT, MS_PER_UPDATE, MAX_UPDATES_PER_FRAME } from './constants';
-import { gameSpeed } from './game-speed';
+import { executeToggleSpeed, gameSpeed, renderPlayPause } from './game-speed';
 import { initGridInput, inputAvailable, localInputBuffer } from './input';
 import { drawGrid, initPathRendering } from './render/grid';
 import { renderProgress } from './render/radial-progress';
@@ -11,6 +11,16 @@ import './tower-select';
 import { clickedTower, hoveredTower, renderTowerSelect, selectedTowerIsDirty } from './tower-select';
 import './ice';
 import { shieldTexture } from './ice';
+
+const div = document.createElement('div');
+div.style.width = '100px';
+div.style.overflow = 'hidden';
+document.body.insertAdjacentElement('beforeend', div);
+
+// eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-explicit-any
+(window as any).display = function (str: string) {
+    div.textContent = str;
+};
 
 // NB: I've had run-time borrow check errors caused by passing around the world
 // reference (ie copying a unique reference). For now, my way around that is
@@ -76,6 +86,7 @@ loader
         const missileTowerTexture = spritesheet.textures['missile-tower.png'] as Texture;
         const towerTexture = spritesheet.textures['tower.png'] as Texture;
         const factoryTexture = spritesheet.textures['factory.png'] as Texture;
+        const corpseTexture = spritesheet.textures['x.png'] as Texture;
 
         // Organize visuals by layer
 
@@ -130,29 +141,6 @@ loader
 
         initPathRendering(background);
         initRangeRendering(rangeLayer);
-
-        const graphics = new Map<number, Container>();
-
-        function create_mob(id: number) {
-            const mob = new Graphics();
-            mob.beginFill(0x666666);
-            mob.drawCircle(0, 0, 0.3 * TILE_SIZE);
-            enemyLayer.addChild(mob);
-            graphics.set(id, mob);
-        }
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-explicit-any
-        (window as any).create_mob = create_mob;
-
-        function render_mob_position(id: number, x: number, y: number) {
-            const mob = graphics.get(id);
-            if (mob) {
-                mob.x = x;
-                mob.y = y;
-            }
-        }
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-explicit-any
-        (window as any).render_mob_position = render_mob_position;
-
 
         type SmokeTrail = [SimpleRope, Point[]]
         const smokeTrails = new Map<number, SmokeTrail>();
@@ -361,6 +349,13 @@ loader
                             sprite.width = 0.9 * TILE_SIZE;
                             sprite.height = 0.9 * TILE_SIZE;
                             sprite.anchor.set(0.5, 0.5);
+                            break;
+                        case 8: // corpse
+                            sprite.texture = corpseTexture;
+                            sprite.width = (spriteAlphas[i] * 0.3 + 0.7) * TILE_SIZE;
+                            sprite.height = (spriteAlphas[i] * 0.3 + 0.7) * TILE_SIZE;
+                            sprite.anchor.set(0.5, 0.5);
+                            break;
                     }
                     sprite.x = spriteXs[i];
                     sprite.y = spriteYs[i];
@@ -460,6 +455,9 @@ loader
                     }
                 }
 
+                // eslint-disable-next-line @typescript-eslint/no-unsafe-call
+                renderPlayPause(world.run_state());
+
                 const msPerUpdate = MS_PER_UPDATE / gameSpeed();
 
                 let updates = 0;
@@ -479,6 +477,17 @@ loader
                                 console.time();
                                 world.save();
                                 console.timeEnd();
+                                break;
+                            case 'play pause':
+                                world.play_pause();
+                                break;
+                            case 'fast forward':
+                                executeToggleSpeed();
+                                break;
+                            case 'send next wave':
+                                // eslint broke :(
+                                // eslint-disable-next-line @typescript-eslint/no-unsafe-call
+                                world.send_next_wave();
                                 break;
                         }
                     }

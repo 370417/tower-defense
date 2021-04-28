@@ -1,12 +1,9 @@
 import { bufferInput } from './input';
 
-export const isPaused = false;
-export const isSpedUp = false;
+export let isSpedUp = false;
 
 export function gameSpeed(): number {
-    if (isPaused) {
-        return 0;
-    } else if (isSpedUp) {
+    if (isSpedUp) {
         return 3;
     } else {
         return 1;
@@ -43,6 +40,15 @@ function toggleSpeed() {
     // }
 }
 
+export function executeToggleSpeed(): void {
+    isSpedUp = isSpedUp === false;
+    if (isSpedUp) {
+        speedButton.classList.add('fast');
+    } else {
+        speedButton.classList.remove('fast');
+    }
+}
+
 backButton.addEventListener('click', () => {
     bufferInput({ type: 'skip back' });
 });
@@ -50,3 +56,13 @@ backButton.addEventListener('click', () => {
 nextButton.addEventListener('click', () => {
     bufferInput({ type: 'send next wave' });
 });
+
+// Because the game can decide to autopause itself, we need to check the
+// play/pause/autopause state every frame and render on change.
+let playPauseState = 1;
+export function renderPlayPause(state: number): void {
+    if (state !== playPauseState) {
+        playPauseState = state;
+        playPauseButton.dataset.state = ['paused', 'autopaused', 'playing'][state];
+    }
+}

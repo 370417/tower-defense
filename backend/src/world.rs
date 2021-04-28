@@ -10,20 +10,20 @@ use crate::{
     config::Config,
     explosion::{Explosion, Impulse},
     factory::Factory,
-    falcon::{create_falcon_tower, Falcon, TargetIndicator},
+    falcon::{Falcon, TargetIndicator},
     graphics::{recycle_range, render_range, BuildProgressData, SpriteData},
-    health::Health,
+    health::{Corpse, Health},
     map::{
         distances::{generate_dist_from_entrance, generate_dist_from_exit, Distances},
         entrances, parse, render_map, tile_center, Constants, Tile, MAP_0, MAP_WIDTH,
     },
-    missile::{create_missile_tower, Missile, MissileSpawner},
+    missile::{Missile, MissileSpawner},
     mob::Mob,
     pusillanimous::Pusillanimous,
     smoke::SmokeTrail,
-    swallow::{create_swallow_tower, Swallow, SwallowAfterImage, SwallowTargeter},
+    swallow::{Swallow, SwallowAfterImage, SwallowTargeter},
     targeting::Threat,
-    tower::{build_towers_by_pos, Tower, TowerStatus},
+    tower::Tower,
     walker::Walker,
     waves::WaveSpawner,
 };
@@ -95,6 +95,7 @@ pub struct CoreState {
 #[derive(Default)]
 pub struct RenderState {
     pub build_progress: BuildProgressData,
+    pub corpses: Map<u32, Corpse>,
     pub preview_tower: Option<Tower>,
     pub smoke_trails: Map<u32, SmokeTrail>,
     pub sprite_data: SpriteData,
@@ -190,6 +191,7 @@ impl World {
         self.update_explosions();
         self.operate_missile_towers();
         self.update_smoke();
+        self.handle_dead();
         self.spawn_mobs();
         self.progress_build();
         for (entity, mob) in &mut self.core_state.mobs {
@@ -232,7 +234,12 @@ impl World {
         self.run_state as u8
     }
 
-    // pub fn play/pause?
+    pub fn play_pause(&mut self) {
+        self.run_state = match self.run_state {
+            RunState::Paused | RunState::AutoPaused => RunState::Playing,
+            RunState::Playing => RunState::Paused,
+        };
+    }
 }
 
 /// Stores the next available entity id (old ids are not reused)

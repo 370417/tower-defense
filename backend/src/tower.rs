@@ -71,17 +71,6 @@ pub fn build_towers_by_pos(towers: &Map<u32, Tower>) -> Map<(usize, usize), u32>
         .collect()
 }
 
-// pub struct TowerType {
-//     pub name: &'static str,
-//     pub base_damage: f32,
-//     pub base_rate_of_fire: f32,
-//     pub base_range: f32,
-//     pub cost: f32,
-//     pub description: &'static str,
-//     pub flavor: &'static str,
-//     pub color: u32,
-// }
-
 pub const SWALLOW_INDEX: usize = 0;
 pub const FALCON_INDEX: usize = 4;
 pub const TESLA_INDEX: usize = 1;
@@ -90,89 +79,6 @@ pub const FIRE_INDEX: usize = 2;
 pub const MISSILE_INDEX: usize = 6;
 pub const TREE_INDEX: usize = 3;
 pub const FACTORY_INDEX: usize = 7;
-
-// pub const BASE_TOWERS: [TowerType; 8] = [
-//     TowerType {
-//         name: "Swallow",
-//         base_damage: 1.0,
-//         base_rate_of_fire: 97.5,
-//         base_range: 3.6,
-//         cost: 3.0,
-//         description: "Attacks faster as enemies get closer.",
-//         flavor: "",
-//         color: 0xd4e8ee,
-//     },
-//     TowerType {
-//         name: "Tesla",
-//         base_damage: 1.0,
-//         base_rate_of_fire: 1.0,
-//         base_range: 1.0,
-//         cost: 3.5,
-//         description: "Generates lightning between pairs of towers.",
-//         flavor: "",
-//         color: 0xeedcba,
-//     },
-//     TowerType {
-//         name: "Fire",
-//         base_damage: 1.0,
-//         base_rate_of_fire: f32::INFINITY,
-//         base_range: 1.0,
-//         cost: 4.0,
-//         description: "Deals damage over time.",
-//         flavor: "“Build a man a fire, and he'll be warm for a day.”",
-//         color: 0xf5bec5,
-//     },
-//     TowerType {
-//         name: "Tree",
-//         base_damage: 1.0,
-//         base_rate_of_fire: 1.0,
-//         base_range: 1.0,
-//         cost: 5.0,
-//         description: "Slows and roots all enemies in range.",
-//         flavor: "",
-//         color: 0xc0e6bf,
-//     },
-//     TowerType {
-//         name: "Falcon",
-//         base_damage: 1.0,
-//         base_rate_of_fire: 1.0,
-//         base_range: 6.0,
-//         cost: 6.0,
-//         description: "Dives down and scatters nearby enemies.",
-//         flavor: "Frightful.",
-//         color: 0xd4e8ee,
-//     },
-//     TowerType {
-//         name: "Gauss",
-//         base_damage: 1.0,
-//         base_rate_of_fire: 1.0,
-//         base_range: 1.0,
-//         cost: 7.0,
-//         description: "Fires in a fixed direction. Can be chained end-to-end.",
-//         flavor: "“Theory attracts practice as the magnet attracts iron.”",
-//         color: 0xeedcba,
-//     },
-//     TowerType {
-//         name: "Missile",
-//         base_damage: 1.0,
-//         base_rate_of_fire: 1.0,
-//         base_range: 6.4,
-//         cost: 8.0,
-//         description: "Fires missiles that deal splash damage.",
-//         flavor: "Anti-ninja technology.",
-//         color: 0xf5bec5,
-//     },
-//     TowerType {
-//         name: "Factory",
-//         base_damage: 0.0,
-//         base_rate_of_fire: 0.0,
-//         base_range: 1.0,
-//         cost: 20.0,
-//         description: "Helps build and upgrade adjacent towers.",
-//         flavor: "",
-//         color: 0xc0e6bf,
-//     },
-// ];
 
 #[wasm_bindgen]
 impl World {

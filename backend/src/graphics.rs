@@ -45,6 +45,7 @@ pub enum SpriteType {
     MissileTower,
     TowerBase,
     Factory,
+    Corpse,
 }
 
 pub struct RopeData {}
@@ -88,6 +89,7 @@ impl World {
         // Order matters: sprites pushed first get rendered in the back.
         self.render_state.sprite_data.clear();
 
+        self.dump_corpses();
         self.dump_factories();
         for (id, targeter) in &self.core_state.swallow_targeters {
             targeter.dump(

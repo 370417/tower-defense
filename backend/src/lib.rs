@@ -39,4 +39,8 @@ use wasm_bindgen::prelude::*;
 extern "C" {
     #[wasm_bindgen(js_namespace = console)]
     fn log(s: &str);
+
+    /// console.log can't handle too much data. dislay doesn't store old data,
+    /// but should work better for displaying things every frame.
+    fn display(s: &str);
 }

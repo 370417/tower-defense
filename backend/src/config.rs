@@ -6,12 +6,6 @@ use crate::waves::Wave;
 pub struct Config {
     pub common: Vec<TowerType>,
     pub waves: Vec<Wave>,
-    // swallow: SwallowExtraConfig,
-}
-
-#[derive(Serialize, Deserialize)]
-pub struct SwallowExtraConfig {
-    pub damage: f32,
 }
 
 #[derive(Serialize, Deserialize, Default)]

@@ -30,8 +30,6 @@ const ROTATION_ACCEL: f32 = 0.05;
 const TOWER_MAX_TURN_SPEED: f32 = 0.08;
 const TOWER_ROTATION_ACCEL: f32 = 0.002;
 
-const SLOW_TURN_DURATION: u32 = 200;
-
 pub const MISSILE_WIDTH: f32 = 5.0;
 pub const MISSILE_LENGTH: f32 = 10.0;
 
@@ -55,6 +53,8 @@ pub struct Missile {
     pub max_speed: f32,
     pub acceleration: f32,
     pub age: u32,
+    tower_x: f32,
+    tower_y: f32,
 }
 
 pub fn create_missile_tower(
@@ -82,7 +82,7 @@ pub fn create_missile_tower(
         MissileSpawner {
             left_reload_countdown: 0,
             right_reload_countdown: 0,
-            reload_cost: 60,
+            reload_cost: (60.0 / config.common[MISSILE_INDEX].base_rate_of_fire).round() as u32,
             rotation: -PI / 2.0,
             rotation_speed: 0.0,
         },
@@ -101,7 +101,7 @@ fn spawn_missile(
 ) {
     let (tower_x, tower_y) = tile_center(tower.row, tower.col);
 
-    missiles.insert(entity, Missile::new(target, rotation));
+    missiles.insert(entity, Missile::new(target, rotation, tower_x, tower_y));
     mobs.insert(
         entity,
         Mob::new(
@@ -109,6 +109,39 @@ fn spawn_missile(
             tower_y - reloading_signum * rotation.cos() * MISSILE_WIDTH * 0.5,
         ),
     );
+}
+
+fn fly_toward(
+    target_x: f32,
+    target_y: f32,
+    missile: &mut Missile,
+    missile_mob: &mut Mob,
+    orbit_adjust: f32,
+) {
+    // Aim toward the target
+    let rotation = f32::atan2(target_y - missile_mob.y, target_x - missile_mob.x) + orbit_adjust;
+
+    // Scale turn speed by movement speed so that missiles aren't super
+    // maneuverable right out the gate.
+    let max_turn_speed = missile.max_turn_speed * missile.speed / missile.max_speed;
+
+    ease_to_x_geometric(
+        &mut missile.rotation,
+        &mut missile.rotation_speed,
+        rotation,
+        0.0, // trying to use calc_sweep_angle here makes the missile miss more often
+        max_turn_speed,
+        missile.rotation_acceleration,
+        crate::ease::Domain::Radian { miss_adjust: 0.95 },
+    );
+
+    missile.speed += missile.acceleration;
+    // Apply air resistance
+    missile.speed *= missile.max_speed / (missile.max_speed + missile.acceleration);
+
+    // Update position
+    missile_mob.x += missile.speed * missile.rotation.cos();
+    missile_mob.y += missile.speed * missile.rotation.sin();
 }
 
 impl World {
@@ -224,66 +257,72 @@ impl World {
         let mut trash = Vec::new();
         for (&entity, missile) in &mut self.core_state.missiles {
             missile.age += 1;
+
+            if let Some(missile_mob) = self.core_state.mobs.get(&entity) {
+                for enemy_entity in self.core_state.walkers.keys() {
+                    if let Some(enemy_mob) = self.core_state.mobs.get(enemy_entity) {
+                        // Check for collision
+                        // The tip of a missile extends out in front of its
+                        // x,y position.
+                        let target_radius = STANDARD_ENEMY_RADIUS;
+                        let missile_tip_x =
+                            missile_mob.x + MISSILE_LENGTH * 0.5 * missile.rotation.cos();
+                        let missile_tip_y =
+                            missile_mob.y + MISSILE_LENGTH * 0.5 * missile.rotation.sin();
+                        let distance_squared = (enemy_mob.x - missile_tip_x)
+                            * (enemy_mob.x - missile_tip_x)
+                            + (enemy_mob.y - missile_tip_y) * (enemy_mob.y - missile_tip_y);
+                        if distance_squared < (target_radius * target_radius) as f32 {
+                            spawn_explosion(
+                                self.core_state.entity_ids.next(),
+                                &mut self.core_state.explosions,
+                                missile_tip_x,
+                                missile_tip_y,
+                                1.2 * f32::TILE_SIZE,
+                                missile.damage(&self.config),
+                            );
+                            trash.push(entity);
+                            continue;
+                        } else if distance_squared < THREAT_DISTANCE * THREAT_DISTANCE {
+                            // Add threat to mobs
+                            self.core_state.threats.insert(*enemy_entity, Threat {});
+                        }
+                    }
+                }
+            }
+
             if let Some(target_mob) = self.core_state.mobs.get(&missile.target) {
                 let target_mob = target_mob.clone();
 
                 if let Some(missile_mob) = self.core_state.mobs.get_mut(&entity) {
-                    // Check for collision
-                    // The tip of a missile extends out in front of its
-                    // x,y position.
-                    let target_radius = STANDARD_ENEMY_RADIUS;
-                    let missile_tip_x =
-                        missile_mob.x + MISSILE_LENGTH * 0.5 * missile.rotation.cos();
-                    let missile_tip_y =
-                        missile_mob.y + MISSILE_LENGTH * 0.5 * missile.rotation.sin();
-                    let distance_squared = (target_mob.x - missile_tip_x)
-                        * (target_mob.x - missile_tip_x)
-                        + (target_mob.y - missile_tip_y) * (target_mob.y - missile_tip_y);
-                    if distance_squared < (target_radius * target_radius) as f32 {
-                        spawn_explosion(
-                            self.core_state.entity_ids.next(),
-                            &mut self.core_state.explosions,
-                            missile_tip_x,
-                            missile_tip_y,
-                            1.2 * f32::TILE_SIZE,
-                            missile.damage(&self.config),
-                        );
-                        trash.push(entity);
-                        continue;
-                    } else if distance_squared < THREAT_DISTANCE * THREAT_DISTANCE {
-                        // Add threat to mobs
-                        self.core_state.threats.insert(missile.target, Threat {});
+                    fly_toward(target_mob.x, target_mob.y, missile, missile_mob, 0.0);
+                }
+            } else {
+                let (x, y) = if let Some(mob) = self.core_state.mobs.get(&entity) {
+                    (mob.x, mob.y)
+                } else {
+                    (0.0, 0.0)
+                };
+                // Find a new target.
+                // If there are enemies around, aim for the closest one.
+                if let Some((target, target_x, target_y)) = find_target(
+                    x,
+                    y,
+                    f32::INFINITY,
+                    Targeting::Close,
+                    &self.core_state.walkers,
+                    &self.core_state.mobs,
+                    &self.level_state,
+                ) {
+                    missile.target = target;
+                    if let Some(missile_mob) = self.core_state.mobs.get_mut(&entity) {
+                        fly_toward(target_x, target_y, missile, missile_mob, 0.0);
                     }
-
-                    // Aim toward the target
-                    let rotation =
-                        f32::atan2(target_mob.y - missile_mob.y, target_mob.x - missile_mob.x);
-
-                    // Max turn speed is slower when the missile is young
-                    let max_turn_speed = if missile.age >= SLOW_TURN_DURATION {
-                        missile.max_turn_speed
-                    } else {
-                        missile.max_turn_speed
-                            * (0.5 + 0.5 * missile.age as f32 / SLOW_TURN_DURATION as f32)
-                    };
-
-                    ease_to_x_geometric(
-                        &mut missile.rotation,
-                        &mut missile.rotation_speed,
-                        rotation,
-                        0.0, // trying to use calc_sweep_angle here makes the missile miss more often
-                        max_turn_speed,
-                        missile.rotation_acceleration,
-                        crate::ease::Domain::Radian { miss_adjust: 0.95 },
-                    );
-
-                    missile.speed += missile.acceleration;
-                    // Apply air resistance
-                    missile.speed *= missile.max_speed / (missile.max_speed + missile.acceleration);
-
-                    // Update position
-                    missile_mob.x += missile.speed * missile.rotation.cos();
-                    missile_mob.y += missile.speed * missile.rotation.sin();
+                } else {
+                    // If there are no enemies, try and orbit the parent tower
+                    if let Some(missile_mob) = self.core_state.mobs.get_mut(&entity) {
+                        fly_toward(missile.tower_x, missile.tower_y, missile, missile_mob, 1.23);
+                    }
                 }
             }
         }
@@ -370,7 +409,7 @@ impl World {
 }
 
 impl Missile {
-    fn new(target: u32, rotation: f32) -> Missile {
+    fn new(target: u32, rotation: f32, tower_x: f32, tower_y: f32) -> Missile {
         Missile {
             target,
             rotation,
@@ -381,6 +420,8 @@ impl Missile {
             speed: 0.0,
             acceleration: ACCELERATION,
             age: 0,
+            tower_x,
+            tower_y,
         }
     }
 
