@@ -33,7 +33,7 @@ const TOWER_ROTATION_ACCEL: f32 = 0.002;
 pub const MISSILE_WIDTH: f32 = 5.0;
 pub const MISSILE_LENGTH: f32 = 10.0;
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct MissileSpawner {
     pub reload_cost: u32,
     pub rotation: f32,
@@ -42,7 +42,7 @@ pub struct MissileSpawner {
     right_reload_countdown: u32,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct Missile {
     pub target: u32,
     pub rotation: f32,
@@ -116,6 +116,9 @@ fn fly_toward(
     target_y: f32,
     missile: &mut Missile,
     missile_mob: &mut Mob,
+    // A positive value, measured in radians, of rotation to be added to the usual rotation.
+    // A non-zero value here will cause the missile to circle its target instead of heading
+    // directly at it.
     orbit_adjust: f32,
 ) {
     // Aim toward the target

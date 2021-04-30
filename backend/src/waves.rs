@@ -1,3 +1,8 @@
+use std::{
+    cmp::{Ordering, Reverse},
+    collections::BinaryHeap,
+};
+
 use serde::{Deserialize, Serialize};
 use wasm_bindgen::prelude::*;
 
@@ -13,33 +18,46 @@ use crate::{
 const TICKS_PER_SECOND: u32 = 60;
 const SECONDS_PER_WAVE: u32 = 20;
 const TICKS_PER_WAVE: u32 = TICKS_PER_SECOND * SECONDS_PER_WAVE;
-const TICKS_BETWEEN_SPAWNS: u32 = 40;
+const TICKS_BETWEEN_SPAWNS: u32 = 21;
+const TICKS_TILL_FIRST_WAVE: u32 = 180;
 
-#[derive(Serialize, Deserialize, Default)]
+#[derive(Serialize, Deserialize, Default, Clone)]
 pub struct WaveSpawner {
     pub entrances: Vec<(usize, usize)>,
     ticks_till_next_wave: u32,
     next_wave_index: usize,
-    queued_enemies: Vec<QueuedEnemy>,
+    queued_enemies: BinaryHeap<Reverse<QueuedEnemy>>,
 }
 
 impl WaveSpawner {
     pub fn new(entrances: Vec<(usize, usize)>) -> WaveSpawner {
         WaveSpawner {
             entrances,
-            ticks_till_next_wave: 0,
+            ticks_till_next_wave: TICKS_TILL_FIRST_WAVE,
             next_wave_index: 0,
-            queued_enemies: Vec::new(),
+            queued_enemies: BinaryHeap::new(),
         }
     }
 }
 
-#[derive(Serialize, Deserialize, Default)]
+#[derive(Serialize, Deserialize, Default, PartialEq, Eq, Clone)]
 struct QueuedEnemy {
     true_row: usize,
     true_col: usize,
     spawn_tick: u32,
     enemy_type: Enemy,
+}
+
+impl Ord for QueuedEnemy {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.spawn_tick.cmp(&other.spawn_tick)
+    }
+}
+
+impl PartialOrd for QueuedEnemy {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
 }
 
 #[derive(Serialize, Deserialize, Default)]
@@ -53,7 +71,7 @@ struct Group {
     r#type: Enemy,
 }
 
-#[derive(Serialize, Deserialize, Clone, Copy)]
+#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq)]
 pub enum Enemy {
     Circle,
     Triangle,
@@ -67,6 +85,19 @@ impl Default for Enemy {
 }
 
 impl World {
+    pub fn save_if_wave_start(&mut self) {
+        if self.core_state.wave_spawner.ticks_till_next_wave == 0 {
+            if self
+                .config
+                .waves
+                .get(self.core_state.wave_spawner.next_wave_index)
+                .is_some()
+            {
+                self.save();
+            }
+        }
+    }
+
     pub fn spawn_mobs(&mut self) {
         // Queue waves
         if self.core_state.wave_spawner.ticks_till_next_wave == 0 {
@@ -84,7 +115,7 @@ impl World {
         }
 
         // Spawn queued mobs
-        for queued_enemy in &self.core_state.wave_spawner.queued_enemies {
+        while let Some(Reverse(queued_enemy)) = self.core_state.wave_spawner.queued_enemies.peek() {
             if queued_enemy.spawn_tick == self.core_state.tick {
                 spawn_enemy(
                     self.core_state.entity_ids.next(),
@@ -95,6 +126,9 @@ impl World {
                     &mut self.core_state.impulses,
                     &mut self.core_state.health,
                 );
+                self.core_state.wave_spawner.queued_enemies.pop();
+            } else {
+                break;
             }
         }
     }
@@ -148,12 +182,15 @@ fn queue_wave(core_state: &mut CoreState, wave: &Wave) {
             i += 1;
 
             let (true_row, true_col) = core_state.wave_spawner.entrances[entrance_i];
-            core_state.wave_spawner.queued_enemies.push(QueuedEnemy {
-                true_row,
-                true_col,
-                spawn_tick: core_state.tick + tick_delay,
-                enemy_type: group.r#type,
-            });
+            core_state
+                .wave_spawner
+                .queued_enemies
+                .push(Reverse(QueuedEnemy {
+                    true_row,
+                    true_col,
+                    spawn_tick: core_state.tick + tick_delay,
+                    enemy_type: group.r#type,
+                }));
         }
     }
 }

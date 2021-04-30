@@ -1,11 +1,11 @@
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 import { Container, Filter, Graphics, Loader, ParticleContainer, Point, Renderer, SimpleRope, Sprite, Texture, Ticker } from 'pixi.js';
 import { MAP_WIDTH, TILE_SIZE, MAP_HEIGHT, MS_PER_UPDATE, MAX_UPDATES_PER_FRAME } from './constants';
-import { executeToggleSpeed, gameSpeed, renderPlayPause } from './game-speed';
-import { initGridInput, inputAvailable, localInputBuffer } from './input';
+import { executeToggleSpeed, gameSpeed, renderPlayPause, renderWaveDesc } from './game-speed';
+import { initGridInput, inputAvailable, localInputBuffer, mouseCol, mouseRow } from './input';
 import { drawGrid, initPathRendering } from './render/grid';
 import { renderProgress } from './render/radial-progress';
-import { initRangeRendering } from './render/range';
+import { initRangeRendering, renderRange, setPreviewTowerInfo } from './render/range';
 import './settings';
 import './tower-select';
 import { clickedTower, hoveredTower, renderTowerSelect, selectedTowerIsDirty } from './tower-select';
@@ -92,9 +92,6 @@ loader
 
         const background = new ParticleContainer();
         stage.addChild(background);
-
-
-
 
         const s0 = new Sprite(circleTexture);
         s0.width = 2 * 2.6 * TILE_SIZE;
@@ -389,14 +386,12 @@ loader
                 for (let i = progressCount; i < buildProgress.length; i++) {
                     buildProgress[i].visible = false;
                 }
+
+                renderRange(world.range_cx(), world.range_cy(), world.range_radius());
             }
 
             // Input
-            const mouseHoverPos = {
-                row: -1,
-                col: -1,
-            };
-            initGridInput(rendererContainer, mouseHoverPos);
+            initGridInput(rendererContainer);
 
             // const nonGameplayMouseInput;
 
@@ -417,15 +412,18 @@ loader
                     return;
                 }
 
-                // const tower = selectedTower();
-
-                if (mouseHoverPos.row >= 0 && mouseHoverPos.col >= 0) {
-                    world.hover_map(0, mouseHoverPos.row, mouseHoverPos.col);
+                if (mouseRow >= 0 && mouseCol >= 0) {
+                    world.hover_map(mouseRow, mouseCol);
                 }
-                if (mouseHoverPos.row >= 0 && mouseHoverPos.col >= 0 && clickedTower?.towerStatus === 'prototype') {
-                    world.preview_build_tower(mouseHoverPos.row, mouseHoverPos.col, clickedTower.towerIndex);
+                if (mouseRow >= 0 && mouseCol >= 0 && clickedTower?.towerStatus === 'prototype') {
+                    world.preview_build_tower(mouseRow, mouseCol, clickedTower.towerIndex);
+                    // Base range is measured in tiles, not pixels
+                    setPreviewTowerInfo(TILE_SIZE * world.query_tower_base_range(clickedTower.towerIndex),
+                        // eslint-disable-next-line @typescript-eslint/no-unsafe-call
+                        world.query_can_build_tower(mouseRow, mouseCol));
                 } else {
                     world.hide_preview_tower();
+                    setPreviewTowerInfo(0, true);
                 }
 
                 if (selectedTowerIsDirty) {
@@ -455,8 +453,8 @@ loader
                     }
                 }
 
-                // eslint-disable-next-line @typescript-eslint/no-unsafe-call
                 renderPlayPause(world.run_state());
+                renderWaveDesc(world.next_wave_index(), world.ticks_till_next_wave());
 
                 const msPerUpdate = MS_PER_UPDATE / gameSpeed();
 
@@ -474,9 +472,7 @@ loader
                                 world.queue_build_tower(input.row, input.col, input.towerIndex);
                                 break;
                             case 'skip back':
-                                console.time();
-                                world.save();
-                                console.timeEnd();
+                                world.restore();
                                 break;
                             case 'play pause':
                                 world.play_pause();
@@ -485,9 +481,10 @@ loader
                                 executeToggleSpeed();
                                 break;
                             case 'send next wave':
-                                // eslint broke :(
-                                // eslint-disable-next-line @typescript-eslint/no-unsafe-call
                                 world.send_next_wave();
+                                break;
+                            case 'cancel tower':
+                                world.cancel_construction(input.row, input.col);
                                 break;
                         }
                     }

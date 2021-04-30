@@ -55,7 +55,7 @@ pub fn find_target(
 }
 
 /// Towers that target mobs can alert the mobs by adding threat components to them.
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct Threat {}
 
 pub const THREAT_DISTANCE: f32 = 50.0;

@@ -6,13 +6,13 @@ use crate::{
     build::BuildOrder,
     config::Config,
     ease::ease_to_x_geometric,
-    graphics::SpriteType,
+    graphics::{RenderState, SpriteType},
     map::tile_center,
     tower::{create_tower, Tower, TowerStatus, FACTORY_INDEX},
-    world::{Map, RenderState, World},
+    world::{Map, World},
 };
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct Factory {
     pub rotation: f32,
     pub rotation_speed: f32,

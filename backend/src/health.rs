@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{graphics::SpriteType, world::World};
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct Health {
     pub curr_health: f32,
     pub max_health: f32,

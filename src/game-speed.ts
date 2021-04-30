@@ -15,29 +15,17 @@ const playPauseButton = document.getElementsByClassName('pause')[0] as HTMLButto
 const speedButton = document.getElementsByClassName('speed')[0] as HTMLButtonElement;
 const nextButton = document.getElementsByClassName('next')[0] as HTMLButtonElement;
 
+const waveDesc = document.querySelector('#wave-info span') as HTMLSpanElement;
+
 playPauseButton.addEventListener('click', playPause);
 speedButton.addEventListener('click', toggleSpeed);
 
 function playPause() {
     bufferInput({ type: 'play pause' });
-    // if (isPaused) {
-    //     isPaused = false;
-    //     playPauseButton.classList.replace('play', 'pause');
-    // } else {
-    //     isPaused = true;
-    //     playPauseButton.classList.replace('pause', 'play');
-    // }
 }
 
 function toggleSpeed() {
     bufferInput({ type: 'fast forward' });
-    // if (isSpedUp) {
-    //     isSpedUp = false;
-    //     speedButton.classList.remove('fast');
-    // } else {
-    //     isSpedUp = true;
-    //     speedButton.classList.add('fast');
-    // }
 }
 
 export function executeToggleSpeed(): void {
@@ -64,5 +52,44 @@ export function renderPlayPause(state: number): void {
     if (state !== playPauseState) {
         playPauseState = state;
         playPauseButton.dataset.state = ['paused', 'autopaused', 'playing'][state];
+    }
+}
+
+window.addEventListener('keydown', event => {
+    if (!event.repeat) {
+        switch (event.code) {
+            case 'KeyH':
+                bufferInput({ type: 'skip back' });
+                event.preventDefault();
+                break;
+            case 'KeyJ':
+            case 'Space':
+                bufferInput({ type: 'play pause' });
+                event.preventDefault();
+                break;
+            case 'KeyK':
+                bufferInput({ type: 'fast forward' });
+                event.preventDefault();
+                break;
+            case 'KeyL':
+                bufferInput({ type: 'send next wave' });
+                event.preventDefault();
+                break;
+        }
+    }
+});
+
+export function renderWaveDesc(waveIndex: number, ticksTillWave: number): void {
+    let text = '';
+    if (waveIndex < 0) {
+        text = '';
+    } else if (ticksTillWave > 0) {
+        const seconds = Math.ceil(ticksTillWave / 60);
+        text = `Wave ${waveIndex + 1} arrives in ${seconds}s`;
+    } else {
+        text = `Sending wave ${waveIndex + 1}`;
+    }
+    if (text !== waveDesc.textContent) {
+        waveDesc.textContent = text;
     }
 }

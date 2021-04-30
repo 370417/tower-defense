@@ -9,7 +9,7 @@ use crate::{
     map::{tile_center, true_row_col, Constants},
     mob::Mob,
     targeting::{find_target, Targeting, Threat},
-    tower::{create_tower, Tower, FALCON_INDEX},
+    tower::{create_tower, Tower, TowerStatus, FALCON_INDEX},
     walker::walk_tile,
     world::{EntityIds, Map, World},
 };
@@ -19,7 +19,7 @@ const MAX_HEIGHT: f32 = 5.0 * f32::TILE_SIZE;
 const COOLDOWN: u32 = 60;
 const SOAR_HEIGHT: f32 = MAX_HEIGHT + 100.0;
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct Falcon {
     pub speed: f32,
     pub accel: f32,
@@ -31,7 +31,7 @@ pub struct Falcon {
     pub curr_tower: u32,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub enum FalconState {
     Rising,
     Diving,
@@ -39,7 +39,7 @@ pub enum FalconState {
     Recovering { countdown: u32 },
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct TargetIndicator {
     // Like a reference count but for falcons instead of pointers :)
     pub falcons: u32,
@@ -64,25 +64,6 @@ impl Falcon {
             FalconState::Rising | FalconState::Recovering { .. } => -PI / 2.0,
             FalconState::Diving => PI / 2.0,
             FalconState::Migrating { rotation } => rotation,
-        }
-    }
-
-    pub fn dump(&self, id: &u32, data: &mut SpriteData, mobs: &Map<u32, Mob>, frame_fudge: f32) {
-        if let Some(mob) = mobs.get(id) {
-            let height = self.height + frame_fudge * (self.height - self.old_height);
-            data.push(
-                SpriteType::Falcon as u8,
-                mob.x + frame_fudge * (mob.x - mob.old_x),
-                mob.y + frame_fudge * (mob.y - mob.old_y) - height,
-                self.rotation(),
-                match self.state {
-                    FalconState::Recovering { countdown } => {
-                        1.0 - countdown as f32 / COOLDOWN as f32
-                    }
-                    _ => 1.0 - falcon_fade(height / MAX_HEIGHT),
-                },
-                0x000000,
-            );
         }
     }
 }
@@ -115,9 +96,8 @@ pub fn create_falcon_tower(
     mobs: &mut Map<u32, Mob>,
     build_orders: &mut VecDeque<BuildOrder>,
     config: &Config,
-) {
+) -> u32 {
     let tower_entity = entities.next();
-    let falcon_entity = entities.next();
 
     let (x, y) = tile_center(row, col);
 
@@ -132,8 +112,10 @@ pub fn create_falcon_tower(
         config,
     );
 
-    falcons.insert(falcon_entity, Falcon::new_rising(tower_entity));
-    mobs.insert(falcon_entity, Mob::new(x, y));
+    falcons.insert(tower_entity, Falcon::new_rising(tower_entity));
+    mobs.insert(tower_entity, Mob::new(x, y));
+
+    tower_entity
 }
 
 impl World {
@@ -224,6 +206,8 @@ impl World {
                                     if let Some(falcon_mob) = self.core_state.mobs.get_mut(entity) {
                                         falcon_mob.x = x;
                                         falcon_mob.y = y;
+                                        falcon_mob.old_x = x;
+                                        falcon_mob.old_y = y;
                                     }
                                 }
                             } else {
@@ -231,6 +215,11 @@ impl World {
                             }
                         }
                         None => {
+                            if let Some(tower) = self.core_state.towers.get(entity) {
+                                if tower.status != TowerStatus::Operational {
+                                    return;
+                                }
+                            }
                             // Look for a target
                             if let Some(tower) = self.core_state.towers.get(&falcon.curr_tower) {
                                 let (tower_x, tower_y) = tile_center(tower.row, tower.col);
@@ -263,6 +252,39 @@ impl World {
                     }
                 }
                 FalconState::Migrating { rotation } => {}
+            }
+        }
+    }
+
+    pub fn dump_falcons(&mut self, frame_fudge: f32) {
+        for (entity, falcon) in &mut self.core_state.falcons {
+            let mob = self.core_state.mobs.get(entity);
+            let tower = self.core_state.towers.get(entity);
+            if let (Some(mob), Some(tower)) = (mob, tower) {
+                let (tower_x, tower_y) = tile_center(tower.row, tower.col);
+                self.render_state.sprite_data.push(
+                    SpriteType::TowerBase as u8,
+                    tower_x,
+                    tower_y,
+                    0.0,
+                    1.0,
+                    self.config.common[FALCON_INDEX].color,
+                );
+
+                let height = falcon.height + frame_fudge * (falcon.height - falcon.old_height);
+                self.render_state.sprite_data.push(
+                    SpriteType::Falcon as u8,
+                    mob.x + frame_fudge * (mob.x - mob.old_x),
+                    mob.y + frame_fudge * (mob.y - mob.old_y) - height,
+                    falcon.rotation(),
+                    match falcon.state {
+                        FalconState::Recovering { countdown } => {
+                            1.0 - countdown as f32 / COOLDOWN as f32
+                        }
+                        _ => 1.0 - falcon_fade(height / MAX_HEIGHT),
+                    },
+                    0x000000,
+                );
             }
         }
     }

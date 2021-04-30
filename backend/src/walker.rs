@@ -11,7 +11,7 @@ use crate::{
 pub const STANDARD_ENEMY_RADIUS: f32 = 0.3 * f32::TILE_SIZE;
 
 /// A walker is an entity that travels along the map's path.
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct Walker {
     pub speed: f32,
 }

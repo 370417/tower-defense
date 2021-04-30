@@ -1,6 +1,29 @@
 use wasm_bindgen::prelude::*;
 
-use crate::{map::tile_center, world::World};
+use crate::{
+    health::Corpse,
+    map::tile_center,
+    smoke::SmokeTrail,
+    tower::Tower,
+    world::{Map, World},
+};
+
+#[derive(Default)]
+pub struct RenderState {
+    pub build_progress: BuildProgressData,
+    pub corpses: Map<u32, Corpse>,
+    pub preview_tower: Option<Tower>,
+    pub smoke_trails: Map<u32, SmokeTrail>,
+    pub sprite_data: SpriteData,
+    pub range_data: RangeData,
+}
+
+#[derive(Default)]
+pub struct RangeData {
+    pub range: f32,
+    pub x: f32,
+    pub y: f32,
+}
 
 /// Stores rendering information for every visible sprite in the game.
 /// Intended to be read from js.
@@ -120,15 +143,8 @@ impl World {
                 frame_fudge,
             );
         }
+        self.dump_falcons(frame_fudge);
         self.dump_preview_tower();
-        for (id, falcon) in &self.core_state.falcons {
-            falcon.dump(
-                id,
-                &mut self.render_state.sprite_data,
-                &self.core_state.mobs,
-                frame_fudge,
-            );
-        }
         for (id, indicator) in &self.core_state.target_indicators {
             indicator.dump(
                 id,
@@ -146,6 +162,39 @@ impl World {
         for y in &mut self.render_state.sprite_data.y {
             *y += 0.5;
         }
+    }
+
+    pub fn range_cx(&self) -> f32 {
+        self.render_state.range_data.x
+    }
+
+    pub fn range_cy(&self) -> f32 {
+        self.render_state.range_data.y
+    }
+
+    pub fn range_radius(&self) -> f32 {
+        self.render_state.range_data.range
+    }
+
+    pub fn hover_map(&mut self, row: usize, col: usize) {
+        self.render_state.range_data = self
+            .core_state
+            .towers_by_pos
+            .get(&(row, col))
+            .and_then(|entity| self.core_state.towers.get(entity))
+            .and_then(|tower| {
+                let (x, y) = tile_center(row, col);
+                Some(RangeData {
+                    x,
+                    y,
+                    range: tower.range,
+                })
+            })
+            .unwrap_or(RangeData {
+                x: 0.0,
+                y: 0.0,
+                range: 0.0,
+            })
     }
 
     /// Call each renderable entity's render functions, which in turn call
@@ -231,7 +280,4 @@ extern "C" {
     pub fn create_explosion(id: u32, x: f32, y: f32);
     pub fn render_explosion(id: u32, radius: f32, alpha: f32);
     pub fn recycle_explosion(id: u32);
-
-    pub fn render_range(x: f32, y: f32, radius: f32);
-    pub fn recycle_range();
 }

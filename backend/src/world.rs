@@ -11,16 +11,15 @@ use crate::{
     explosion::{Explosion, Impulse},
     factory::Factory,
     falcon::{Falcon, TargetIndicator},
-    graphics::{recycle_range, render_range, BuildProgressData, SpriteData},
-    health::{Corpse, Health},
+    graphics::RenderState,
+    health::Health,
     map::{
         distances::{generate_dist_from_entrance, generate_dist_from_exit, Distances},
-        entrances, parse, render_map, tile_center, Constants, Tile, MAP_0, MAP_WIDTH,
+        entrances, parse, render_map, Constants, Tile, MAP_0, MAP_WIDTH,
     },
     missile::{Missile, MissileSpawner},
     mob::Mob,
     pusillanimous::Pusillanimous,
-    smoke::SmokeTrail,
     swallow::{Swallow, SwallowAfterImage, SwallowTargeter},
     targeting::Threat,
     tower::Tower,
@@ -48,7 +47,7 @@ pub type Map<K, V> = IndexMap<K, V, FnvBuildHasher>;
 /// of determinism. In a single threaded context, those libraries might be
 /// deterministic, but it feels safer to roll my own state.
 
-#[derive(Serialize, Deserialize, Default)]
+#[derive(Serialize, Deserialize, Default, Clone)]
 pub struct CoreState {
     pub tick: u32,
     pub build_queue: VecDeque<BuildOrder>,
@@ -92,15 +91,6 @@ pub struct CoreState {
     pub wave_spawner: WaveSpawner,
 }
 
-#[derive(Default)]
-pub struct RenderState {
-    pub build_progress: BuildProgressData,
-    pub corpses: Map<u32, Corpse>,
-    pub preview_tower: Option<Tower>,
-    pub smoke_trails: Map<u32, SmokeTrail>,
-    pub sprite_data: SpriteData,
-}
-
 pub struct LevelState {
     pub level_id: u32,
     pub dist_from_entrance: Distances,
@@ -127,6 +117,8 @@ pub struct World {
     pub level_state: LevelState,
     #[wasm_bindgen(skip)]
     pub render_state: RenderState,
+    #[wasm_bindgen(skip)]
+    pub saved_states: Vec<CoreState>,
 }
 
 #[wasm_bindgen]
@@ -170,6 +162,7 @@ impl World {
                 map,
             },
             render_state: Default::default(),
+            saved_states: Vec::new(),
         }
     }
 
@@ -178,6 +171,9 @@ impl World {
             RunState::Paused | RunState::AutoPaused => return,
             RunState::Playing => {}
         }
+
+        // Never do anything before saving
+        self.save_if_wave_start();
 
         self.remember_mob_positions();
         self.update_pusillanimity();
@@ -205,29 +201,19 @@ impl World {
         self.core_state.tick += 1;
     }
 
-    pub fn save(&mut self) {
-        let bytes = match bincode::serialize(&self.core_state) {
-            Ok(bytes) => bytes,
-            Err(error) => {
-                crate::log(&format!("Unable to save: {}", error));
-                return;
-            }
-        };
-        crate::log(&format!("size {}", bytes.len()));
-    }
-
-    // 2 types of user inputs:
-    // 1. stuff that affects the game and needs to be shared over the network
-    // 2. stuff that just affects the ui, like this hover_map
-    pub fn hover_map(&self, _player: u32, row: usize, col: usize) {
-        for tower in self.core_state.towers.values() {
-            if (row, col) == (tower.row, tower.col) {
-                let (x, y) = tile_center(row, col);
-                render_range(x, y, tower.range);
-                return;
+    pub fn restore(&mut self) {
+        let old_tick = self.core_state.tick;
+        if let Some(saved) = self.saved_states.pop() {
+            self.core_state = saved;
+            // Avoid weird time travel & underflow with visuals
+            self.render_state = Default::default();
+            // Go back one more time if the restore was <= 3s.
+            // If we don't do this, it is nigh impossible to restore more than
+            // one save state back (since restoring immediately saves again)
+            if old_tick - self.core_state.tick <= 3 * 60 {
+                self.restore();
             }
         }
-        recycle_range();
     }
 
     pub fn run_state(&self) -> u8 {
@@ -242,8 +228,14 @@ impl World {
     }
 }
 
+impl World {
+    pub fn save(&mut self) {
+        self.saved_states.push(self.core_state.clone());
+    }
+}
+
 /// Stores the next available entity id (old ids are not reused)
-#[derive(Serialize, Deserialize, Default)]
+#[derive(Serialize, Deserialize, Default, Clone)]
 pub struct EntityIds(u32);
 
 impl EntityIds {

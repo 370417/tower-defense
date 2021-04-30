@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::world::World;
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct Pusillanimous {
     pub duration: u32,
 }

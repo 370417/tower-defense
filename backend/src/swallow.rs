@@ -33,7 +33,7 @@ const SWALLOW_RADIUS: f32 = f32::TILE_SIZE * 0.3;
 const AFTER_IMAGE_PERIOD: u32 = 5;
 const AFTER_IMAGE_DURATION: u32 = 33;
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct Swallow {
     pub target: Target,
     pub rotation: f32,
@@ -48,7 +48,7 @@ pub struct Swallow {
     pub after_image_countdown: u32,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct SwallowAfterImage {
     x: f32,
     y: f32,
@@ -56,18 +56,21 @@ pub struct SwallowAfterImage {
     age: u32,
 }
 
-#[derive(Serialize, Deserialize)]
 /// Component for tower entities. Keeps track of the closest walker and only
 /// updates when necessary. This way, if 100 swallows need to scan 100 towers
 /// to see if they have an enemy in range, and all 100 swallows have different
 /// ranges, we can avoid looping over all enemies over and over.
+#[derive(Serialize, Deserialize, Clone)]
 pub struct SwallowTargeter {
     pub closest_distance_squared: f32,
     pub closest_x: f32,
     pub closest_y: f32,
+    // Keep track of swallow entities so that we can destroy swallows when
+    // destroying their towers.
+    pub home_swallow_entities: Vec<u32>,
 }
 
-#[derive(Serialize, Deserialize, PartialEq)]
+#[derive(Serialize, Deserialize, PartialEq, Clone)]
 pub enum Target {
     Enemy(u32),
     Tower {
@@ -193,6 +196,7 @@ pub fn create_swallow_tower(
             closest_distance_squared: f32::INFINITY,
             closest_x: 0.0,
             closest_y: 0.0,
+            home_swallow_entities: vec![swallow_entity],
         },
     );
 

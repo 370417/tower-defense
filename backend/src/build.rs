@@ -2,9 +2,9 @@ use serde::{Deserialize, Serialize};
 use wasm_bindgen::prelude::*;
 
 use crate::{
-    config::Config,
     factory::create_factory,
-    graphics::{SpriteData, SpriteType},
+    falcon::create_falcon_tower,
+    graphics::SpriteType,
     map::{tile_center, Tile, TRUE_MAP_WIDTH},
     missile::create_missile_tower,
     swallow::create_swallow_tower,
@@ -16,7 +16,7 @@ use crate::{
 };
 
 /// Stores a tower/upgrade that we are building or want to build in the future.
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct BuildOrder {
     pub cost: u32,
     pub progress: f32,
@@ -29,7 +29,7 @@ pub struct BuildOrder {
 impl BuildOrder {
     fn complete(&self, towers: &mut Map<u32, Tower>) {
         match self.build_type {
-            BuildType::Tower {} => {
+            BuildType::Tower => {
                 if let Some(tower) = towers.get_mut(&self.tower_entity) {
                     tower.status = TowerStatus::Operational;
                 }
@@ -41,7 +41,7 @@ impl BuildOrder {
     /// Update the tower status when we begin construction
     fn notify_tower(&self, towers: &mut Map<u32, Tower>) {
         match self.build_type {
-            BuildType::Tower {} => {
+            BuildType::Tower => {
                 if let Some(tower) = towers.get_mut(&self.tower_entity) {
                     tower.status = TowerStatus::Building;
                 }
@@ -51,12 +51,9 @@ impl BuildOrder {
     }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub enum BuildType {
-    Tower {
-        // tower_index: usize,
-    // tower_entity: u32,
-    },
+    Tower,
     Upgrade {
         /// False iff the tower for this upgrade is still under initial construction.
         can_build: bool,
@@ -67,7 +64,7 @@ pub enum BuildType {
 impl BuildType {
     fn can_build(&self) -> bool {
         match self {
-            BuildType::Tower { .. } => true,
+            BuildType::Tower => true,
             BuildType::Upgrade { can_build, .. } => *can_build,
         }
     }
@@ -94,7 +91,7 @@ impl World {
         // If there is a tower under construction in this spot already,
         // return and do nothing.
         for tower in self.core_state.towers.values() {
-            if (row, col) == (tower.row, tower.col) {
+            if (row, col) == (tower.row, tower.col) && tower.status != TowerStatus::Queued {
                 return;
             }
         }
@@ -117,7 +114,7 @@ impl World {
         for build_order in &self.core_state.build_queue {
             if (row, col) == (build_order.row, build_order.col) {
                 match build_order.build_type {
-                    BuildType::Tower {} if build_order.progress == 0.0 => {
+                    BuildType::Tower if build_order.progress == 0.0 => {
                         replace = Some(build_order.tower_entity);
                         break;
                     }
@@ -137,7 +134,8 @@ impl World {
         }
 
         if let Some(entity) = replace {
-            // Make sure we remove any upgrades queued for the tower in addition
+            // By filtering out all orders with this (row, col), we
+            // make sure we remove any upgrades queued for the tower in addition
             // to the tower itself.
             let build_queue = std::mem::take(&mut self.core_state.build_queue);
             for build_order in build_queue {
@@ -156,16 +154,40 @@ impl World {
                 progress: 0.0,
                 row,
                 col,
-                build_type: BuildType::Tower {
-                    // tower_index,
-                    // tower_entity,
-                },
+                build_type: BuildType::Tower,
                 tower_entity,
             });
         }
     }
 
     pub fn queue_upgrade(&mut self, row: usize, col: usize, upgrade_index: usize) {}
+
+    pub fn cancel_construction(&mut self, row: usize, col: usize) {
+        let build_order = self
+            .core_state
+            .build_queue
+            .iter()
+            .enumerate()
+            .find(|(_, build_order)| (row, col) == (build_order.row, build_order.col));
+        if let Some((index, build_order)) = build_order {
+            if let Some(&tower_entity) = self
+                .core_state
+                .towers_by_pos
+                .get(&(build_order.row, build_order.col))
+            {
+                self.destroy_tower(tower_entity);
+            }
+            self.core_state.build_queue.remove(index);
+
+            // Autopause
+            if self.core_state.build_queue.is_empty() {
+                use crate::world::RunState;
+                if let RunState::Playing = self.run_state {
+                    self.run_state = RunState::AutoPaused;
+                }
+            }
+        }
+    }
 }
 
 impl World {
@@ -223,6 +245,7 @@ impl World {
             }
         }
 
+        // Autopause
         if !completed_order_indeces.is_empty()
             && completed_order_indeces.len() == self.core_state.build_queue.len()
         {
@@ -254,15 +277,27 @@ impl World {
         }
     }
 
-    fn destroy_tower(&mut self, entity: u32) {
+    pub fn destroy_tower(&mut self, entity: u32) {
         if let Some(tower) = self.core_state.towers.remove(&entity) {
+            self.core_state
+                .towers_by_pos
+                .remove(&(tower.row, tower.col));
             match tower.type_index {
-                i if i == SWALLOW_INDEX => {}
+                i if i == SWALLOW_INDEX => {
+                    if let Some(targeter) = self.core_state.swallow_targeters.remove(&entity) {
+                        for entity in targeter.home_swallow_entities {
+                            self.core_state.swallows.remove(&entity);
+                            self.core_state.mobs.remove(&entity);
+                        }
+                    }
+                }
                 i if i == FALCON_INDEX => {}
                 i if i == TESLA_INDEX => {}
                 i if i == GAUSS_INDEX => {}
                 i if i == FIRE_INDEX => {}
-                i if i == MISSILE_INDEX => {}
+                i if i == MISSILE_INDEX => {
+                    self.core_state.missile_spawners.remove(&entity);
+                }
                 i if i == TREE_INDEX => {}
                 i if i == FACTORY_INDEX => {}
                 _ => {}
@@ -284,7 +319,17 @@ impl World {
                 &mut self.core_state.build_queue,
                 &self.config,
             ),
-            i if i == FALCON_INDEX => 0,
+            i if i == FALCON_INDEX => create_falcon_tower(
+                &mut self.core_state.entity_ids,
+                row,
+                col,
+                &mut self.core_state.towers,
+                &mut self.core_state.towers_by_pos,
+                &mut self.core_state.falcons,
+                &mut self.core_state.mobs,
+                &mut self.core_state.build_queue,
+                &self.config,
+            ),
             i if i == TESLA_INDEX => 0,
             i if i == GAUSS_INDEX => 0,
             i if i == FIRE_INDEX => 0,
@@ -315,18 +360,7 @@ impl World {
 
     pub fn dump_preview_tower(&mut self) {
         if let Some(tower) = &self.render_state.preview_tower {
-            let true_row = tower.row + 2;
-            let true_col = tower.col + 2;
-            let tint = match self.level_state.map[true_row * TRUE_MAP_WIDTH + true_col] {
-                Tile::Empty => {
-                    self.config
-                        .common
-                        .get(tower.type_index)
-                        .unwrap_or(&Default::default())
-                        .color
-                }
-                _ => 0xff0000,
-            };
+            let tint = self.config.get_common(tower.type_index).color;
             let (x, y) = tile_center(tower.row, tower.col);
             self.render_state
                 .sprite_data

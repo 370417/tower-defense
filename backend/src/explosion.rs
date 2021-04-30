@@ -17,7 +17,7 @@ const EXPLOSION_DURATION: u32 = 16;
 /// A stationary explosion that expands over time (eased by a sine wave).
 /// We keep track of old_radius to tell when entities cross the edge of the
 /// explosion.
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct Explosion {
     center_x: f32,
     center_y: f32,
@@ -69,6 +69,8 @@ impl World {
 
                 render_explosion(entity, explosion.radius, cos_eased_progress);
 
+                let full_damage = explosion.touched_entities.is_empty();
+
                 // Apply impulses to mobs at the edge of the explosion.
                 // We don't want to reapply impulses to mobs that have been hit
                 // in the past. So we don't apply an impulse if the mob was
@@ -99,7 +101,11 @@ impl World {
 
                             // Deal damage
                             if let Some(health) = self.core_state.health.get_mut(entity) {
-                                health.curr_health -= explosion.damage;
+                                health.curr_health -= if full_damage {
+                                    explosion.damage
+                                } else {
+                                    explosion.damage / 2.0
+                                };
                             }
                         }
                     }
@@ -116,7 +122,7 @@ impl World {
 }
 
 /// Represents decaying impulses on an entity. Decay happens multiplicatively.
-#[derive(Serialize, Deserialize, Default)]
+#[derive(Serialize, Deserialize, Default, Clone)]
 pub struct Impulse {
     pub dx: f32,
     pub dy: f32,

@@ -6,11 +6,11 @@ use wasm_bindgen::prelude::*;
 use crate::{
     build::{BuildOrder, BuildType},
     config::Config,
-    map::Constants,
+    map::{Constants, Tile, TRUE_MAP_WIDTH},
     world::{Map, World},
 };
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct Tower {
     pub row: usize,
     pub col: usize,
@@ -19,7 +19,7 @@ pub struct Tower {
     pub status: TowerStatus,
 }
 
-#[derive(Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, PartialEq, Eq, Clone)]
 pub enum TowerStatus {
     Queued,
     Building,
@@ -62,13 +62,6 @@ pub fn create_tower(
             *can_build = true;
         }
     }
-}
-
-pub fn build_towers_by_pos(towers: &Map<u32, Tower>) -> Map<(usize, usize), u32> {
-    towers
-        .iter()
-        .map(|(entity, tower)| ((tower.row, tower.col), *entity))
-        .collect()
 }
 
 pub const SWALLOW_INDEX: usize = 0;
@@ -138,7 +131,6 @@ impl World {
             .unwrap_or_default()
     }
 
-    // what about towers in progress?
     pub fn query_tower_entity(&self, row: usize, col: usize) -> u32 {
         *self.core_state.towers_by_pos.get(&(row, col)).unwrap_or(&0)
     }
@@ -156,5 +148,17 @@ impl World {
             })
             .unwrap_or_default()
             .to_owned()
+    }
+
+    pub fn query_can_build_tower(&self, row: usize, col: usize) -> bool {
+        let has_tower = self.core_state.towers_by_pos.contains_key(&(row, col));
+        let true_row = row + 2;
+        let true_col = col + 2;
+        let empty_terrain = self
+            .level_state
+            .map
+            .get(true_row * TRUE_MAP_WIDTH + true_col)
+            == Some(&Tile::Empty);
+        !has_tower && empty_terrain
     }
 }

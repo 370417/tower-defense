@@ -7,7 +7,7 @@ use crate::{
 };
 
 /// A movalbe object.
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct Mob {
     pub x: f32,
     pub y: f32,

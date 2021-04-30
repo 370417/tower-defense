@@ -133,6 +133,7 @@ function formatFloat(n: number): string {
     }
 }
 
+/// Create a black and gray progress bar out of a CSS gradient
 function formatGradient(stop0: number, min: number, max: number): string {
     stop0 = Math.min(Math.max(stop0, min), max);
     const stop0percentage = 100 * (stop0 - min) / (max - min);
